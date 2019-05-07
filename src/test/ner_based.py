@@ -1,8 +1,11 @@
 import pandas as pd
-
+from sklearn_crfsuite import CRF
+from sklearn_crfsuite.metrics import flat_classification_report
+from sklearn.model_selection import cross_val_predict
+import eli5
 data = pd.read_csv("ner_dataset.csv", encoding="latin1")
 data = data.fillna(method="ffill")
-data = data.head(40)
+data = data.head(300)
 words = list(set(data["Word"].values))
 n_word = len(words)
 print(data)
@@ -68,7 +71,7 @@ def word2features(sent, i):
         })
     else:
         features["BOS"] = True
-
+    # end of the sentence
     if i < len(sent) - 1:
         word1 = sent[i + 1][0]
         postag1 = sent[i + 1][1]
@@ -87,10 +90,9 @@ def word2features(sent, i):
 def sent2features(sent):
     return [word2features(sent, i) for i in range(len(sent))]
 
-
+# token:'British', postag: 'JJ', label: 'B-gpe'
 def sent2labels(sent):
     return [label for token, postag, label in sent]
-
 
 def sent2tokens(sent):
     return [token for token, postag, label in sent]
@@ -99,6 +101,27 @@ def sent2tokens(sent):
 X = [sent2features(s) for s in sentences]
 y = [sent2labels(s) for s in sentences]
 
-print("X /n", X)
+# print("Xxxx: ", X)
+# print("YYY", y)
+
+
+crf = CRF(algorithm="lbfgs",
+          c1=0.1,
+          c2=0.1,
+          max_iterations=100,
+          all_possible_transitions=False)
+
+pred = cross_val_predict(estimator=crf, X=X, y=y, cv=5)
+report = flat_classification_report(y_pred=pred, y_true=y)
+print(report)
+
+crf.fit(X, y)
+
+
+
+
+
+
+
 
 
