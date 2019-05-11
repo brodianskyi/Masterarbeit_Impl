@@ -1,6 +1,13 @@
+# import the pandas library
 import pandas as pd
 
-df = [('Thousands', 'NNS', 'O'), ('of', 'IN', 'O'), ('demonstrators', 'NNS', 'O'), ('have', 'VBP', 'O'), ('marched', 'VBN', 'O'), ('through', 'IN', 'O'), ('London', 'NNP', 'B-geo'), ('to', 'TO', 'O'), ('protest', 'VB', 'O'), ('the', 'DT', 'O'), ('war', 'NN', 'O'), ('in', 'IN', 'O'), ('Iraq', 'NNP', 'B-geo'), ('and', 'CC', 'O'), ('demand', 'VB', 'O'), ('the', 'DT', 'O'), ('withdrawal', 'NN', 'O'), ('of', 'IN', 'O'), ('British', 'JJ', 'B-gpe'), ('troops', 'NNS', 'O'), ('from', 'IN', 'O'), ('that', 'DT', 'O'), ('country', 'NN', 'O'), ('.', '.', 'O')]
+ipl_data = {'Team': ['Riders', 'Riders', 'Devils', 'Devils', 'Kings',
+                     'kings', 'Kings', 'Kings', 'Riders', 'Royals', 'Royals', 'Riders'],
+            'Rank': [1, 2, 2, 3, 3, 4, 1, 1, 2, 4, 1, 2],
+            'Year': [2014, 2015, 2014, 2015, 2014, 2015, 2016, 2017, 2016, 2014, 2015, 2017],
+            'Points': [876, 789, 863, 673, 741, 812, 756, 788, 694, 701, 804, 690]}
+df = pd.DataFrame(ipl_data)
+df_grouped = df.groupby("Rank")
 
+print(df_grouped["Team"])
 
-print(df)

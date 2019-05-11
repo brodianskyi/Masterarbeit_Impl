@@ -1,7 +1,7 @@
 import pandas as pd
-from sklearn_crfsuite import CRF
-from sklearn_crfsuite.metrics import flat_classification_report
-from sklearn.model_selection import cross_val_predict
+# from sklearn_crfsuite import CRF
+# from sklearn_crfsuite.metrics import flat_classification_report
+# from sklearn.model_selection import cross_val_predict
 
 
 data = pd.read_csv("ner_dataset.csv", encoding="latin1")
@@ -10,7 +10,7 @@ data = data.head(400)
 words = list(set(data["Word"].values))
 n_word = len(words)
 print(data)
-print("Number of words in dataset = ", n_word)
+# print("Number of words in dataset = ", n_word)
 
 
 class SentenceGetter(object):
@@ -26,14 +26,15 @@ class SentenceGetter(object):
         self.grouped = self.data.groupby("Sentence #").apply(agg_func)
         print("self.grouped: ", self.grouped)
         self.sentences = [s for s in self.grouped]
-        print("self.sentence: ", self.sentences)
+       # print("self.sentence: ", self.sentences)
 
    # assign a number of the sentence
     def get_next(self):
         try:
             s = self.grouped["Sentence: {}".format(self.n_sent)]
+            print("first sentence ", "Sentence: {}".format(self.n_sent))
             self.n_sent += 1
-            print("self.n_sent", self.n_sent)
+            print("self.n_sent = ", self.n_sent)
             return s
         except:
             return None
@@ -106,7 +107,7 @@ y = [sent2labels(s) for s in sentences]
 # print("Xxxx: ", X)
 # print("YYY", y)
 
-
+'''
 crf = CRF(algorithm="lbfgs",
           c1=0.1,
           c2=0.1,
@@ -118,7 +119,7 @@ report = flat_classification_report(y_pred=pred, y_true=y)
 print(report)
 
 crf.fit(X, y)
-
+'''
 
 
 
