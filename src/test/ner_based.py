@@ -2,10 +2,11 @@ import pandas as pd
 from sklearn_crfsuite import CRF
 from sklearn_crfsuite.metrics import flat_classification_report
 from sklearn.model_selection import cross_val_predict
-import eli5
+
+
 data = pd.read_csv("ner_dataset.csv", encoding="latin1")
 data = data.fillna(method="ffill")
-data = data.head(300)
+data = data.head(400)
 words = list(set(data["Word"].values))
 n_word = len(words)
 print(data)
@@ -32,6 +33,7 @@ class SentenceGetter(object):
         try:
             s = self.grouped["Sentence: {}".format(self.n_sent)]
             self.n_sent += 1
+            print("self.n_sent", self.n_sent)
             return s
         except:
             return None
