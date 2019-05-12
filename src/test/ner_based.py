@@ -1,4 +1,5 @@
 import pandas as pd
+
 # from sklearn_crfsuite import CRF
 # from sklearn_crfsuite.metrics import flat_classification_report
 # from sklearn.model_selection import cross_val_predict
@@ -10,6 +11,8 @@ data = data.head(400)
 words = list(set(data["Word"].values))
 n_word = len(words)
 print(data)
+
+
 # print("Number of words in dataset = ", n_word)
 
 
@@ -26,9 +29,10 @@ class SentenceGetter(object):
         self.grouped = self.data.groupby("Sentence #").apply(agg_func)
         print("self.grouped: ", self.grouped)
         self.sentences = [s for s in self.grouped]
-       # print("self.sentence: ", self.sentences)
 
-   # assign a number of the sentence
+    # print("self.sentence: ", self.sentences)
+
+    # assign a number of the sentence
     def get_next(self):
         try:
             s = self.grouped["Sentence: {}".format(self.n_sent)]
@@ -93,9 +97,11 @@ def word2features(sent, i):
 def sent2features(sent):
     return [word2features(sent, i) for i in range(len(sent))]
 
+
 # token:'British', postag: 'JJ', label: 'B-gpe'
 def sent2labels(sent):
     return [label for token, postag, label in sent]
+
 
 def sent2tokens(sent):
     return [token for token, postag, label in sent]
@@ -120,11 +126,3 @@ print(report)
 
 crf.fit(X, y)
 '''
-
-
-
-
-
-
-
-
