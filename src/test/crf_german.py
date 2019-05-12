@@ -1,5 +1,6 @@
 import csv
 import pandas as pd
+import numpy as np
 
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils import to_categorical
@@ -20,14 +21,14 @@ data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
 data = data.head(300)
 
-words = list(set(data["Word"].values))
-n_word = len(words)
-print("Number of words in dataset =", n_word)
+# words = list(set(data["Word"].values))
+# n_word = len(words)
+# print("Number of words in dataset =", n_word)
 
-otr_tags = list(set(data["OTR_Span"].values))
-print("otr_tags:", otr_tags)
-n_otr_tags = len(otr_tags)
-print("Number of otr_tags", n_otr_tags)
+# otr_tags = list(set(data["OTR_Span"].values))
+# print("otr_tags:", otr_tags)
+# n_otr_tags = len(otr_tags)
+# print("Number of otr_tags", n_otr_tags)
 
 emb_tags = list(set(data["EMB_Span"]))
 # print("emb_tags:", emb_tags)
@@ -76,10 +77,21 @@ class SentenceGetter(object):
         except:
             return None
 
+    def get_column(self, column_number):
+        column_items = list()
+        for s in sentences:
+            for w in s:
+                column_items.append(w[column_number])
+        return list(set(column_items))
+
 
 getter = SentenceGetter(data)
 sent = getter.get_first_sent()
 sentences = getter.sentences
+words = getter.get_column(0)
+n_words = len(words)
+otr_tags = getter.get_column(1)
+n_otr_tags = len(otr_tags)
 
 # vocabulary {key-word: value-index+2}
 # {'für': 2, 'Bekanntlich': 3, 'aufzuregen': 5}
@@ -110,5 +122,16 @@ X = pad_sequences(maxlen=MAX_LEN, sequences=X, padding="post", value=word2idx["P
 # convert OTR_Span in sentence to list of tag indexes
 y = [[tag2idx[w[1]] for w in s] for s in sentences]
 y = pad_sequences(maxlen=MAX_LEN, sequences=y, padding="post", value=tag2idx["PAD"])
+
+# one-hot encode
+y = [to_categorical(i, num_classes=n_otr_tags+1) for i in y]
+
+X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.1)
+X_tr.shape, X_te.shape, np.array(y_tr).shape, np.array(y_te).shape
+
+print("Raw Sample: ", " ".join([w[0] for w in sentences[0]]))
+print("Raw Label: ", " ".join([w[1] for w in sentences[0]]))
+
+
 
 
