@@ -1,14 +1,14 @@
 import csv
-import pandas as pd
-import numpy as np
+import sys
 
+import numpy as np
+import pandas as pd
+from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional
+from keras.models import Model, Input
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils import to_categorical
-from sklearn.model_selection import train_test_split
-from keras.models import Model, Input
-from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Dropout, Bidirectional
 from keras_contrib.layers import CRF
-from sklearn_crfsuite.metrics import flat_classification_report
+from sklearn.model_selection import train_test_split
 
 # number of examples used in each iteration
 BATCH_SIZE = 512
@@ -22,19 +22,8 @@ EMBEDDING = 40
 data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span", "EMB_Span", "Sentence_number"],
                    delimiter="\t",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
-data = data.head(300)
-
-# words = list(set(data["Word"].values))
-# n_word = len(words)
-# print("Number of words in dataset =", n_word)
-
-# otr_tags = list(set(data["OTR_Span"].values))
-# print("otr_tags:", otr_tags)
-# n_otr_tags = len(otr_tags)
-# print("Number of otr_tags", n_otr_tags)
-
+# data = data.head(500)
 emb_tags = list(set(data["EMB_Span"]))
-# print("emb_tags:", emb_tags)
 emb_tags = len(emb_tags)
 
 
@@ -57,8 +46,6 @@ class SentenceGetter(object):
             self.step_count += 1
             if i == "#":
                 self.sentences_count += 1
-               # self.data.loc[self.step_count, "Sentence_number"] = "sentence_header_second: {}".format(self.sentences_count)
-               # self.data.loc[self.step_count, "EMB_Span"] = "sentence_header: {}".format(self.sentences_count)
                 self.sentences_info.append((self.data.at[self.step_count, "Word"],
                                             self.data.at[self.step_count, "OTR_Span"]))
             else:
@@ -96,8 +83,6 @@ n_words = len(words)
 otr_tags = getter.get_column(1)
 n_otr_tags = len(otr_tags)
 
-# vocabulary {key-word: value-index+2}
-# {'für': 2, 'Bekanntlich': 3, 'aufzuregen': 5}
 word2idx = {w: i + 2 for i, w in enumerate(words)}
 # unknown words
 word2idx["UNK"] = 1
@@ -107,18 +92,15 @@ word2idx["PAD"] = 0
 idx2word = {i: w for w, i in word2idx.items()}
 
 # vocabulary {key-tag: value-index+2}
-tag2idx = {t: i+1 for i, t in enumerate(otr_tags)}
+tag2idx = {t: i + 1 for i, t in enumerate(otr_tags)}
 tag2idx["PAD"] = 0
 # vocabulary {key-index: value-tag}
 idx2tag = {i: w for w, i in tag2idx.items()}
 
 # Sentences[3] = [("Bayern", "B-ORG", "B-LOC"), ("München", "I-ORG", "B-LOC")]
-print("The word ARD-Programmchef is identified by the index:{}".format(word2idx["ARD-Programmchef"]))
+# print("The word ARD-Programmchef is identified by the index:{}".format(word2idx["ARD-Programmchef"]))
 # print("The labels B-LOC(which defines locations) is identified by the index:{}".format(tag2idx["B-LOC"]))
 
-print("word2idx", word2idx)
-# convert each word in sentence to list of word indexes
-# [[(Sentence1)181, 228, 150, 113],[(Sentence2)46, 36, 158, 12]
 X = [[word2idx[w[0]] for w in s] for s in sentences]
 X = pad_sequences(maxlen=MAX_LEN, sequences=X, padding="post", value=word2idx["PAD"])
 
@@ -127,7 +109,7 @@ y = [[tag2idx[w[1]] for w in s] for s in sentences]
 y = pad_sequences(maxlen=MAX_LEN, sequences=y, padding="post", value=tag2idx["PAD"])
 
 # one-hot encode
-y = [to_categorical(i, num_classes=n_otr_tags+1) for i in y]
+y = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y]
 
 X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.1)
 X_tr.shape, X_te.shape, np.array(y_tr).shape, np.array(y_te).shape
@@ -136,31 +118,36 @@ print("Raw Sample: ", " ".join([w[0] for w in sentences[0]]))
 print("Raw Label: ", " ".join([w[1] for w in sentences[0]]))
 
 # Model definition
-input = Input(shape=(MAX_LEN, ))
+input = Input(shape=(MAX_LEN,))
 # input_dim = n_word + PAD + UNK
 model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
 model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.1))(model)
 model = TimeDistributed(Dense(50, activation="relu"))(model)
 # CRF Layer = n_otr_tags + PAD
-crf = CRF(n_otr_tags+1)
+crf = CRF(n_otr_tags + 1)
 out = crf(model)
 model = Model(input, out)
 model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
 model.summary()
-# training
 history = model.fit(X_tr, np.array(y_tr), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
-pred_cat = model.predict(X_te)
-pred = np.argmax(pred_cat, axis=-1)
-y_te_true = np.argmax(y_te, -1)
-# convert the index to tag
-pred_tag = [[idx2tag[i] for i in row] for row in pred]
-y_te_true_tag = [[idx2tag[i] for i in row] for row in y_te_true]
-print("pred_tag", pred_tag)
-print("y_te_true_tag", y_te_true_tag)
 
-report = flat_classification_report(y_pred=pred_tag, y_true=y_te_true_tag)
-#print(report)
+y_te_tag = np.argmax(y_tr, axis=-1)
+oldStdout = sys.stdout
+file_out = open("output.txt", "w")
+sys.stdout = file_out
+for i in range(370):
+    sent_loop = X_tr[i]
+    p = model.predict(np.array([sent_loop]))
+    p = np.argmax(p, axis=-1)
+    idx_of_word = [idx2word[row] for row in sent_loop]
+    pred_tag_of_word = [idx2tag[row] for row in p[0]]
+    tag_of_word = [idx2tag[row] for row in y_te_tag[i]]
+    print("idx_of_word----", idx_of_word)
+    print("pred_tag_of_word-----", pred_tag_of_word)
+    print("tag_of_word-----", tag_of_word)
+    print("#########################################")
 
-
-
-
+sys.stdout = oldStdout
+file_out.close()
+# report = flat_classification_report(y_pred=pred_tag, y_true=y_te_true_tag)
+# print(report)
