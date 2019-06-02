@@ -1,6 +1,7 @@
 import csv
 import sys
 
+import gensim
 import numpy as np
 import pandas as pd
 from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional
@@ -14,20 +15,17 @@ from sklearn.model_selection import train_test_split
 BATCH_SIZE = 512
 # number of passes through entire dataset
 EPOCHS = 5
-# max length of review (in words)
+# length of the subsequence
 MAX_LEN = 80
 # dimension of word embedding vector
-EMBEDDING = 40
+EMBEDDING = 300
 
 data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span", "EMB_Span", "Sentence_number"],
                    delimiter="\t",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
-# data = data.head(500)
+
 emb_tags = list(set(data["EMB_Span"]))
 emb_tags = len(emb_tags)
-
-
-# print("Number of emb_tags", emb_tags)
 
 
 class SentenceGetter(object):
@@ -42,7 +40,6 @@ class SentenceGetter(object):
         self.step_count = -1
 
         for i in self.data["Word_number"].values:
-            # print("i = ", i)
             self.step_count += 1
             if i == "#":
                 self.sentences_count += 1
@@ -91,15 +88,10 @@ word2idx["PAD"] = 0
 # vocabulary {key-index: value-word}
 idx2word = {i: w for w, i in word2idx.items()}
 
-# vocabulary {key-tag: value-index+2}
+# vocabulary {key-index: value-tag}
 tag2idx = {t: i + 1 for i, t in enumerate(otr_tags)}
 tag2idx["PAD"] = 0
-# vocabulary {key-index: value-tag}
 idx2tag = {i: w for w, i in tag2idx.items()}
-
-# Sentences[3] = [("Bayern", "B-ORG", "B-LOC"), ("München", "I-ORG", "B-LOC")]
-# print("The word ARD-Programmchef is identified by the index:{}".format(word2idx["ARD-Programmchef"]))
-# print("The labels B-LOC(which defines locations) is identified by the index:{}".format(tag2idx["B-LOC"]))
 
 X = [[word2idx[w[0]] for w in s] for s in sentences]
 X = pad_sequences(maxlen=MAX_LEN, sequences=X, padding="post", value=word2idx["PAD"])
@@ -114,12 +106,27 @@ y = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y]
 X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.1)
 X_tr.shape, X_te.shape, np.array(y_tr).shape, np.array(y_te).shape
 
-print("Raw Sample: ", " ".join([w[0] for w in sentences[0]]))
-print("Raw Label: ", " ".join([w[1] for w in sentences[0]]))
+# parse embeddings to build word as string to their vector representation
+word_vector_model = gensim.models.KeyedVectors.load_word2vec_format("german.model", binary=True)
+embedding_index = {}
+print("word_vector_model is downloaded!")
+for w, v in zip(word_vector_model.wv.index2word, word_vector_model.wv.syn0):
+    embedding_index[w] = v
+
+print("Found %s word vectors." % len(embedding_index))
+# build embedding matrix to load into embedding layer
+# with the shape (max_words = n_word + PAD + UNK, embedding_dim)
+
+embedding_matrix = np.zeros((n_words + 2, EMBEDDING))
+for word, i in word2idx.items():
+    if i > 1:
+        embedding_vector = embedding_index.get(word)
+        if embedding_vector is not None:
+            embedding_matrix[i] = embedding_vector
 
 # Model definition
 input = Input(shape=(MAX_LEN,))
-# input_dim = n_word + PAD + UNK
+# input_dim = n_word + PAD + UNK - size of the vocabulary
 model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
 model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.1))(model)
 model = TimeDistributed(Dense(50, activation="relu"))(model)
@@ -127,25 +134,23 @@ model = TimeDistributed(Dense(50, activation="relu"))(model)
 crf = CRF(n_otr_tags + 1)
 out = crf(model)
 model = Model(input, out)
+model.summary()
+# set pre trained weight into embedding layer
+model.layers[1].set_weights([embedding_matrix])
+model.layers[1].trainable = False
+
 model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
 model.summary()
+
 history = model.fit(X_tr, np.array(y_tr), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
 
 y_te_tag = np.argmax(y_tr, axis=-1)
 oldStdout = sys.stdout
 file_out = open("output.txt", "w")
+
 sys.stdout = file_out
-for i in range(370):
-    sent_loop = X_tr[i]
-    p = model.predict(np.array([sent_loop]))
-    p = np.argmax(p, axis=-1)
-    idx_of_word = [idx2word[row] for row in sent_loop]
-    pred_tag_of_word = [idx2tag[row] for row in p[0]]
-    tag_of_word = [idx2tag[row] for row in y_te_tag[i]]
-    print("idx_of_word----", idx_of_word)
-    print("pred_tag_of_word-----", pred_tag_of_word)
-    print("tag_of_word-----", tag_of_word)
-    print("#########################################")
+# weights_embedding = model.layers[1].get_weights()[0]
+# print(weights_embedding)
 
 sys.stdout = oldStdout
 file_out.close()
