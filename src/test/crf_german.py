@@ -7,9 +7,11 @@ import pandas as pd
 from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional
 from keras.models import Model, Input
 from keras.preprocessing.sequence import pad_sequences
+from nltk.tokenize import TweetTokenizer
 from keras.utils import to_categorical
 from keras_contrib.layers import CRF
 from sklearn.model_selection import train_test_split
+from seqeval.metrics import f1_score, classification_report
 
 # number of examples used in each iteration
 BATCH_SIZE = 512
@@ -119,7 +121,7 @@ print("Found %s word vectors." % len(embedding_index))
 
 embedding_matrix = np.zeros((n_words + 2, EMBEDDING))
 for word, i in word2idx.items():
-    if i > 1:
+    if i < n_words + 2:
         embedding_vector = embedding_index.get(word)
         if embedding_vector is not None:
             embedding_matrix[i] = embedding_vector
@@ -149,10 +151,35 @@ oldStdout = sys.stdout
 file_out = open("output.txt", "w")
 
 sys.stdout = file_out
-# weights_embedding = model.layers[1].get_weights()[0]
-# print(weights_embedding)
-
 sys.stdout = oldStdout
 file_out.close()
-# report = flat_classification_report(y_pred=pred_tag, y_true=y_te_true_tag)
-# print(report)
+
+test_pred = model.predict(X_te, verbose=1)
+
+
+def pred2label(pred):
+    out = []
+    for pred_i in pred:
+        out_i = []
+        for p in pred_i:
+            p_i = np.argmax(p)
+            out_i.append(idx2tag[p_i].replace("PAD", "0"))
+        out.append(out_i)
+    return out
+
+
+pred_labels = pred2label(test_pred)
+test_labels = pred2label(y_te)
+print("F1-score: {:.1%}".format(f1_score(test_labels, pred_labels)))
+print(classification_report(test_labels, pred_labels))
+# prediction for single testing sentence
+test_sent = "Einstein erhielt die Lehrberechtigung an der Berliner Universität, am 1. Oktober 1917 wurde er Direktor des Kaiser-Wilhelm-Instituts für Physik und blieb in dieser Position bis 1933. Von 1923 bis 1933 war Einstein auch Mitglied des Senats der Kaiser-Wilhelm-Gesellschaft. Seine letzte Auslandsreise außerhalb der USA nach seiner Übersiedlung dorthin unternahm Einstein 1935 auf die zu Großbritannien gehörenden Bermuda-Inseln, ein Zwangsaufenthalt aus formalen Gründen, da er damals noch nicht US-Staatsbürger war."
+tok_test_sent = TweetTokenizer().tokenize(test_sent)
+x_test_sent = pad_sequences(maxlen=MAX_LEN, sequences=[[word2idx.get(w, 0) for w in tok_test_sent]], padding="post", value=0)
+p = model.predict(np.array([x_test_sent[0]]))
+p = np.argmax(p, axis=-1)
+print("{:15}||{}".format("Word", "Prediction"))
+print(30 * "=")
+for w, pred in zip(tok_test_sent, p[0]):
+    print("{:15}: {:5}".format(w, otr_tags[pred]))
+
