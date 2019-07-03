@@ -138,7 +138,7 @@ emb_char = TimeDistributed(Embedding(input_dim=n_chars + 2, output_dim=10,
                                      input_length=max_len_char, mask_zero=False))(char_in)
 # character LSTM to get word encodings by characters
 char_enc = TimeDistributed(LSTM(units=20, return_sequences=False,
-                                recurrent_dropout=0.5))(emb_char)
+                                recurrent_dropout=0.6))(emb_char)
 
 # main LSTM
 x = concatenate([emb_word, char_enc])
@@ -154,7 +154,7 @@ model.summary()
 history = model.fit([X_word_tr,
                      np.array(X_char_tr).reshape((len(X_char_tr), max_len, max_len_char))],
                     np.array(y_tr).reshape(len(y_tr), max_len, 1),
-                    batch_size=32, epochs=12, validation_split=0.1, verbose=1)
+                    batch_size=32, epochs=21, validation_split=0.1, verbose=1)
 
 test_pred = model.predict([X_word_te, np.array(X_char_te).reshape((len(X_char_te),
                                                                    max_len, max_len_char))])
@@ -166,8 +166,8 @@ def pred2label(pred):
     for i in range(len(test_pred)):
         p = np.argmax(pred[i], axis=-1)
         for t, pr in zip(y_te[i], p):
-            t_out.append(idx2tag[t])
-            pre_out.append(idx2tag[pr])
+            t_out.append(idx2tag[t].replace("0", "O").replace("PAD", "O"))
+            pre_out.append(idx2tag[pr].replace("0", "O").replace("PAD", "O"))
 
 
 '''

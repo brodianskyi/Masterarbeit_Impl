@@ -16,7 +16,7 @@ from seqeval.metrics import f1_score, classification_report
 # number of examples used in each iteration
 BATCH_SIZE = 512
 # number of passes through entire dataset
-EPOCHS = 5
+EPOCHS = 11
 # length of the subsequence
 MAX_LEN = 80
 # dimension of word embedding vector
@@ -107,7 +107,7 @@ y = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y]
 
 X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.1)
 X_tr.shape, X_te.shape, np.array(y_tr).shape, np.array(y_te).shape
-
+'''
 # parse embeddings to build word as string to their vector representation
 word_vector_model = gensim.models.KeyedVectors.load_word2vec_format("german.model", binary=True)
 embedding_index = {}
@@ -125,12 +125,12 @@ for word, i in word2idx.items():
         embedding_vector = embedding_index.get(word)
         if embedding_vector is not None:
             embedding_matrix[i] = embedding_vector
-
+'''
 # Model definition
 input = Input(shape=(MAX_LEN,))
 # input_dim = n_word + PAD + UNK - size of the vocabulary
 model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
-model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.1))(model)
+model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.8))(model)
 model = TimeDistributed(Dense(50, activation="relu"))(model)
 # CRF Layer = n_otr_tags + PAD
 crf = CRF(n_otr_tags + 1)
@@ -138,14 +138,45 @@ out = crf(model)
 model = Model(input, out)
 model.summary()
 # set pre trained weight into embedding layer
-model.layers[1].set_weights([embedding_matrix])
-model.layers[1].trainable = False
+# model.layers[1].set_weights([embedding_matrix])
+# model.layers[1].trainable = False
 
 model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
 model.summary()
 
 history = model.fit(X_tr, np.array(y_tr), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
+# new version
+test_pred = model.predict(X_te, verbose=1)
 
+
+def pred2label(pred):
+    # [[[0001][0010]]]
+    '''
+    for i in range(len(pred)):
+        p = np.argmax(pred[i], axis=-1)
+        for t, pr in zip(y_te[i], p):
+            t_out.append(idx2tag[t].replace("0", "O").replace("PAD", "O"))
+            pre_out.append(idx2tag[pr].replace("0", "O").replace("PAD", "O"))
+    '''
+    out = []
+    for pred_i in pred:
+        out_i = []
+        for p in pred_i:
+            p_i = np.argmax(p)
+            out_i.append(idx2tag[p_i].replace("0", "O").replace("PAD", "O"))
+        out.append(out_i)
+    return out
+
+
+pred_labels = pred2label(test_pred)
+test_labels = pred2label(y_te)
+print("F1-score: {:.1%}".format(f1_score(test_labels, pred_labels)))
+print(classification_report(test_labels, pred_labels))
+
+
+
+'''
+# old version
 y_te_tag = np.argmax(y_tr, axis=-1)
 oldStdout = sys.stdout
 file_out = open("output.txt", "w")
@@ -181,5 +212,5 @@ p = np.argmax(p, axis=-1)
 print("{:15}||{}".format("Word", "Prediction"))
 print(30 * "=")
 for w, pred in zip(tok_test_sent, p[0]):
-    print("{:15}: {:5}".format(w, otr_tags[pred]))
-
+    print("{:15}: {:5}".format(w, idx2tag[pred]))
+'''

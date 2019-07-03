@@ -15,23 +15,22 @@ F1-score: 72.5%
       ORG       0.32      0.26      0.29       540
       LOC       0.65      0.59      0.62       853
 ------Without Pre-trained Word Embeddings------------
-F1-score: 67.8%
+keras - 2.2.4, keras_kontrib - 2.0.8, dropout = 0.6
+F1-score: 49.9%
            precision    recall  f1-score   support
-      LOC       0.69      0.50      0.58       826
- LOCderiv       0.94      0.24      0.38       277
-      OTH       0.24      0.03      0.06       338
-      PER       0.43      0.43      0.43       789
- PERderiv       0.00      0.00      0.00         7
-  LOCpart       0.00      0.00      0.00        53
-        0       1.00      1.00      1.00      2400
- ORGderiv       0.00      0.00      0.00         1
- OTHderiv       0.00      0.00      0.00        13
-  PERpart       0.00      0.00      0.00        15
-  OTHpart       0.00      0.00      0.00        19
-  ORGpart       0.00      0.00      0.00        93
-      ORG       0.22      0.35      0.27       520
-micro avg       0.72      0.64      0.68      5351
-macro avg       0.70      0.64      0.65      5351
+  OTHpart       0.00      0.00      0.00        31
+      LOC       0.77      0.55      0.64       791
+  ORGpart       0.47      0.08      0.13        92
+      PER       0.69      0.46      0.56       757
+  LOCpart       0.00      0.00      0.00        62
+ PERderiv       0.00      0.00      0.00        11
+      OTH       0.25      0.33      0.29       276
+ LOCderiv       0.83      0.64      0.72       277
+      ORG       0.37      0.39      0.38       509
+ OTHderiv       0.00      0.00      0.00        43
+  PERpart       0.00      0.00      0.00        17
+micro avg       0.57      0.44      0.50      2866
+macro avg       0.58      0.44      0.49      2866
 --------------With Character Embeddings-----------
 F1-score: 74.2%
            precision    recall  f1-score   support
