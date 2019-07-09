@@ -115,11 +115,6 @@ model.add(Flatten())
 model.add(Dense(32, activation="relu"))
 model.add(Dense(1, activation="sigmoid"))
 model.summary()
-print("-----model config", model.get_config())
-print("-----list of the layers", model.layers)
-print("-----model input", model.input)
-print("-----model outputs", model.output)
-
 # set pre trained weight(word embeddings) into the Embedding layer
 # sets the values of the weights of the model
 

@@ -138,13 +138,13 @@ emb_char = TimeDistributed(Embedding(input_dim=n_chars + 2, output_dim=10,
                                      input_length=max_len_char, mask_zero=False))(char_in)
 # character LSTM to get word encodings by characters
 char_enc = TimeDistributed(LSTM(units=20, return_sequences=False,
-                                recurrent_dropout=0.6))(emb_char)
+                                recurrent_dropout=0.5))(emb_char)
 
 # main LSTM
 x = concatenate([emb_word, char_enc])
 x = SpatialDropout1D(0.3)(x)
 main_lstm = Bidirectional(LSTM(units=50, return_sequences=True,
-                               recurrent_dropout=0.6))(x)
+                               recurrent_dropout=0.5))(x)
 out = TimeDistributed(Dense(n_otr_tags + 1, activation="softmax"))(main_lstm)
 
 model = Model([word_in, char_in], out)
@@ -154,7 +154,7 @@ model.summary()
 history = model.fit([X_word_tr,
                      np.array(X_char_tr).reshape((len(X_char_tr), max_len, max_len_char))],
                     np.array(y_tr).reshape(len(y_tr), max_len, 1),
-                    batch_size=32, epochs=21, validation_split=0.1, verbose=1)
+                    batch_size=32, epochs=12, validation_split=0.2, verbose=1)
 
 test_pred = model.predict([X_word_te, np.array(X_char_te).reshape((len(X_char_te),
                                                                    max_len, max_len_char))])

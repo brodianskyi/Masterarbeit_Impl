@@ -16,7 +16,7 @@ from seqeval.metrics import f1_score, classification_report
 # number of examples used in each iteration
 BATCH_SIZE = 512
 # number of passes through entire dataset
-EPOCHS = 1
+EPOCHS = 11
 # length of the subsequence
 MAX_LEN = 80
 # dimension of word embedding vector
@@ -27,7 +27,7 @@ data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
 
 emb_tags = list(set(data["EMB_Span"]))
-n_emb_tags = len(emb_tags)
+emb_tags = len(emb_tags)
 
 
 class SentenceGetter(object):
@@ -81,10 +81,7 @@ words = getter.get_column(0)
 n_words = len(words)
 otr_tags = getter.get_column(1)
 n_otr_tags = len(otr_tags)
-print("otr_tags_1_column", otr_tags)
-print("n_otr_tags_1_column", n_otr_tags)
-print("emb_tags_2_coulumn", emb_tags)
-print("n_emb_tags_2_coulumn", n_emb_tags)
+
 
 word2idx = {w: i + 2 for i, w in enumerate(words)}
 # unknown words
@@ -111,7 +108,7 @@ y = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y]
 
 X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.1)
 X_tr.shape, X_te.shape, np.array(y_tr).shape, np.array(y_te).shape
-'''
+
 # parse embeddings to build word as string to their vector representation
 word_vector_model = gensim.models.KeyedVectors.load_word2vec_format("german.model", binary=True)
 embedding_index = {}
@@ -129,12 +126,12 @@ for word, i in word2idx.items():
         embedding_vector = embedding_index.get(word)
         if embedding_vector is not None:
             embedding_matrix[i] = embedding_vector
-'''
+
 # Model definition
 input = Input(shape=(MAX_LEN,))
 # input_dim = n_word + PAD + UNK - size of the vocabulary
 model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
-model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.8))(model)
+model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.6))(model)
 model = TimeDistributed(Dense(50, activation="relu"))(model)
 # CRF Layer = n_otr_tags + PAD
 crf = CRF(n_otr_tags + 1)
@@ -142,13 +139,13 @@ out = crf(model)
 model = Model(input, out)
 model.summary()
 # set pre trained weight into embedding layer
-# model.layers[1].set_weights([embedding_matrix])
-# model.layers[1].trainable = False
+model.layers[1].set_weights([embedding_matrix])
+model.layers[1].trainable = False
 
 model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
 model.summary()
 
-history = model.fit(X_tr, np.array(y_tr), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
+history = model.fit(X_tr, np.array(y_tr), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.2, verbose=2)
 # new version
 test_pred = model.predict(X_te, verbose=1)
 
