@@ -57,3 +57,21 @@ F1-score: 52.2%
  LOCderiv       0.90      0.66      0.76       279
 micro avg       0.58      0.47      0.52      2878
 macro avg       0.65      0.47      0.53      2878
+----------------------------------------------------
+Pre trained word embeddings
+F1-score: 62.3%
+           precision    recall  f1-score   support
+      ORG       0.71      0.42      0.53       533
+ ORGderiv       0.00      0.00      0.00         5
+ OTHderiv       0.36      0.33      0.35        24
+  OTHpart       0.00      0.00      0.00        12
+  ORGpart       0.50      0.01      0.03        76
+ PERderiv       0.00      0.00      0.00        13
+      PER       0.75      0.69      0.72       775
+      LOC       0.79      0.60      0.68       798
+      OTH       0.64      0.36      0.46       316
+ LOCderiv       0.84      0.66      0.74       268
+  LOCpart       0.00      0.00      0.00        49
+  PERpart       0.00      0.00      0.00        13
+micro avg       0.75      0.53      0.62      2882
+macro avg       0.72      0.53      0.60      2882
