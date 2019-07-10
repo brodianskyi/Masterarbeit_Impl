@@ -14,9 +14,9 @@ from sklearn.model_selection import train_test_split
 from seqeval.metrics import f1_score, classification_report
 
 # number of examples used in each iteration
-BATCH_SIZE = 512
+BATCH_SIZE = 250
 # number of passes through entire dataset
-EPOCHS = 1
+EPOCHS = 17
 # length of the subsequence
 MAX_LEN = 80
 # dimension of word embedding vector
@@ -134,7 +134,7 @@ for word, i in word2idx.items():
 input = Input(shape=(MAX_LEN,))
 # input_dim = n_word + PAD + UNK - size of the vocabulary
 model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
-model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.8))(model)
+model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.5))(model)
 model = TimeDistributed(Dense(50, activation="relu"))(model)
 # CRF Layer = n_otr_tags + PAD
 crf = CRF(n_otr_tags + 1)

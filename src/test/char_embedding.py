@@ -154,7 +154,7 @@ model.summary()
 history = model.fit([X_word_tr,
                      np.array(X_char_tr).reshape((len(X_char_tr), max_len, max_len_char))],
                     np.array(y_tr).reshape(len(y_tr), max_len, 1),
-                    batch_size=32, epochs=12, validation_split=0.2, verbose=1)
+                    batch_size=32, epochs=17, validation_split=0.1, verbose=1)
 
 test_pred = model.predict([X_word_te, np.array(X_char_te).reshape((len(X_char_te),
                                                                    max_len, max_len_char))])

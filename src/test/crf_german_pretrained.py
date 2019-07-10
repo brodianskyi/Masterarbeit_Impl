@@ -14,9 +14,9 @@ from sklearn.model_selection import train_test_split
 from seqeval.metrics import f1_score, classification_report
 
 # number of examples used in each iteration
-BATCH_SIZE = 312
+BATCH_SIZE = 280
 # number of passes through entire dataset
-EPOCHS = 20
+EPOCHS = 17
 # length of the subsequence
 MAX_LEN = 80
 # dimension of word embedding vector

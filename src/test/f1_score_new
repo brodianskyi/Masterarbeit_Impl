@@ -1,0 +1,67 @@
+-------- Ohne Pretrained Word Embeddings ---------
+
+F1-score: 50.2%
+           precision    recall  f1-score   support
+
+      ORG       0.37      0.45      0.41       509
+  OTHpart       0.13      0.15      0.14        13
+ ORGderiv       0.00      0.00      0.00         3
+  LOCpart       0.26      0.19      0.22        48
+ OTHderiv       0.33      0.24      0.28        17
+  PERpart       0.00      0.00      0.00        16
+      OTH       0.23      0.34      0.27       315
+  ORGpart       0.54      0.16      0.25        85
+ LOCderiv       0.90      0.66      0.76       277
+ PERderiv       0.00      0.00      0.00         9
+      PER       0.70      0.49      0.58       753
+      LOC       0.63      0.59      0.60       808
+
+micro avg       0.52      0.49      0.50      2853
+macro avg       0.56      0.49      0.51      2853
+
+
+--------------------------------------------------
+
+
+
+-------- Pretrained Word Embeddings -------------
+
+F1-score: 64.3%
+           precision    recall  f1-score   support
+ ORGderiv       0.00      0.00      0.00         5
+ OTHderiv       0.43      0.09      0.15        33
+      OTH       0.76      0.34      0.47       291
+  PERpart       0.00      0.00      0.00        19
+  LOCpart       0.00      0.00      0.00        50
+      PER       0.78      0.66      0.72       804
+  OTHpart       0.00      0.00      0.00        22
+      LOC       0.83      0.62      0.71       849
+ PERderiv       0.00      0.00      0.00         4
+ LOCderiv       0.83      0.65      0.73       298
+  ORGpart       0.00      0.00      0.00        55
+      ORG       0.71      0.48      0.57       528
+micro avg       0.79      0.54      0.64      2958
+macro avg       0.74      0.54      0.62      2958
+
+
+--------------------------------------------------
+
+---------- Charakterebene ------------------------
+
+F1-score: 52.2%
+           precision    recall  f1-score   support
+  PERpart       0.33      0.07      0.12        14
+      PER       0.77      0.49      0.60       761
+      ORG       0.44      0.42      0.43       554
+ ORGderiv       0.00      0.00      0.00         5
+  ORGpart       0.22      0.74      0.34        80
+  LOCpart       0.57      0.09      0.16        44
+ OTHderiv       0.68      0.48      0.57        27
+  OTHpart       0.17      0.06      0.09        17
+      OTH       0.32      0.34      0.33       314
+ PERderiv       0.00      0.00      0.00         8
+      LOC       0.78      0.50      0.61       775
+ LOCderiv       0.90      0.66      0.76       279
+micro avg       0.58      0.47      0.52      2878
+macro avg       0.65      0.47      0.53      2878
+
