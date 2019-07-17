@@ -3,7 +3,6 @@ from torch import nn
 
 
 class CRF(nn.Module):
-
     """
     Implementation of Linear-chain Conditional Random Field (CRF).
     """
@@ -31,21 +30,59 @@ class CRF(nn.Module):
         # initialize with the big negative number
         # so exp(-10000) will tend to zero
         # no transitions allowed to the beginning of sentence
-        # [индекс с какой строки начинать: какой заканчивать , с какого столбца в этой строке начинать:каким закончить]
-        # во всех строках каждый столбец с номером bos_tag_id = -10000.0
         self.transitions.data[:, self.bos_tag_id] = -10000.0
         # no transition allowed from the end of the sentence
-        # в строке с номером eos_tag_id все стобцы = -10000.0
         self.transitions.data[self.eos_tag_id, :] = -10000.0
-        '''
-        where bos_tag_id = 0; 
-              eos_tag_id = 2.
-        tensor([[-1.0000e+04, -4.4406e-02,  7.9665e-02],
-                [-1.0000e+04,  3.2845e-02, -1.1155e-03],
-                [-1.0000e+04, -1.0000e+04, -1.0000e+04]], requires_grad=True)
-        '''
+
+    def forward(self, emissions, tags, mask=None):
+        """
+        Compute the negative log-likelihood. See log_likelihood method
+        """
+        nll = -self.log_likelihood(emissions, tags, mask=mask)
+        return nll
+
+    def log_likelihood(self, emissions, tags, mask=None):
+        """
+        Compute the probability of a sequence of tags given a sequence of emissions scores
+
+        Emissions(torch.Tensor):Sequence of emissions for each label.
+        IF batch_first(whether the first dimension represents the batch_size) == True -> Shape == (batch_size, seq_len, nb_labels);
+        ELSE Shape == (seq_len, batch_size, nb_labels)
+
+        Tags(torch.LongTensor): Sequence of labels
+        IF batch_first == True -> Shape == (batch_size, seq_len)
+        ELSE Shape == (seq_len, batch_size)
+
+        Mask (torch.FloatTensor, optional): Tensor representing valid positions.
+        IF None -> all positions are considered valid.
+        IF batch_first == True -> Shape == (batch_size, seq_len)
+        ELSE Shape == (seq_len, batch_size)
+
+        Return:
+            torch.Tensor: the log-likelihood for each sequence in the batch
+            Shape == (batch_size,)
+
+
+        """
+        if not self.batch_first:
+            # swap dimension 0 and 1
+            # transpose Shape == (seq_len, batch_size, nb_labels)
+            # to (batch_size, seq_len, nb_labels)
+            emissions = emissions.transpose(0, 1)
+            tags = tags.transpose(0, 1)
+
+        if mask is None:
+            # all positions are considered valid
+            # initialize tensor with 1 in each position with the given shape
+            mask = torch.ones(emissions.shape[:2], dtype=torch.float)
+
+        scores = self._compute_scores(emissions, tags, mask=mask)
+        partition = self._compute_log_partition(emissions, mask=mask)
+        return torch.sum(scores - partition)
 
 
 crf = CRF(3, 0, 2)
 print(crf.nb_labels)
 print(crf.transitions)
+print(torch.ones(10))
+print(crf.transitions.transpose(0, 1))
