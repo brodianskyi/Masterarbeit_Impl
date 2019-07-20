@@ -2,6 +2,29 @@ import tensorflow as tf
 from keras import backend as K
 from keras.engine import Layer, InputSpec
 
+def crf_decode(potentials, transition_params, sequence_length):
+    """
+    Decode the highest scoring sequence of tags in TensorFlow.
+    potentials: <Tensor "embedding" shape=(2,2,11), dtype=float32>
+                [batch_size, max_seq_len, num_tags] - Matrix of unary potentials
+
+    transition_params: <Tensor> shape=(11,11)
+                       [n_classes, n_classes] - matrix of binary potentials
+    sequence_length: <Tensor> shape=(2,1) -> Flatten -> shape(2,)
+                    [batch_size] - containing sequence length
+    Return:
+      decode_tags: [batch_size, max_seq_len], with dtype tf.int32 - the highest scoring tag indicies
+      best_score:  [batch_size] -  the score of decode_tags
+    """
+    # B - is the batch_size
+    # T - max_seq_len
+    # num_tags by "0" (output)
+
+    # num_tags = 2
+    num_tags = potentials.get_shape()[2].value
+    # computes
+
+
 
 class CRFLayer(Layer):
 
@@ -55,7 +78,7 @@ class CRFLayer(Layer):
         # inputs = <Tensor "embedding" shape=(2,2,11), dtype=float32>
         # sequence_length = <Tensor> shape=(2,1), dtype=int32
         inputs, sequence_length = inputs
-        #  Flatten a tensor, reshape into 1-D
+        #  Flatten a tensor, reshape into 1-D; from shape=(2,1) in shape(2,)
         # definition of sequence_length outside __init__ method
         self.sequence_length = K.flatten(sequence_length)
         y_pred = self.viterbi_decode(inputs, self.sequence_length)
@@ -64,15 +87,19 @@ class CRFLayer(Layer):
         '''
         Decode the highest scoring sequence of tags in TensorFlow
         Arg:
-           potentials: [batch_size, max_seq_len, num_tags] - Matrix of unary potentials - inputs = <Tensor "embedding" shape=(2,2,11), dtype=float32>
-           sequence_length: [batch_size] - containing sequence length - <Tensor> shape=(2,1) -> Flatten -> (3)
+           potentials: inputs = <Tensor "embedding" shape=(2,2,11), dtype=float32>
+                       [batch_size, max_seq_len, num_tags] - Matrix of unary potentials
+           sequence_length: <Tensor> shape=(2,1) -> Flatten -> shape(2,)
+                           [batch_size] - containing sequence length
         Return:
             decode_tags: [batch_size, max_seq_len], with dtype tf.int32
             contains the highest scoring tag indicies
         '''
-        # decode_tags, best_score = crf_decode(self, potentials, self.transition_params, sequence_length)
+        decode_tags, best_score = crf_decode(potentials, self.transition_params, sequence_length)
 
-    def crf_decode(self, potentials, transition_params, sequence_length):
+        return decode_tags
+
+
 
 
 

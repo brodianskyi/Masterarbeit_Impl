@@ -1,10 +1,23 @@
-from seqeval.metrics import accuracy_score
-from seqeval.metrics import classification_report
-from seqeval.metrics import f1_score
+import tensorflow as tf
+from keras import backend as K
 
-y_true = ['1', '2', '2', "1", "2", "2"]
-print(y_true[0:2])
+tf_initial_tensor_constant = tf.constant(
+    [
+        [
+            [1, 2, 3, 4],
+            [5, 6, 7, 8],
+            [9, 10, 11, 12]
+        ]
+        ,
+        [
+            [13, 14, 15, 16],
+            [17, 18, 19, 20],
+            [21, 22, 23, 24],
+        ]
+    ]
+    , dtype="int32"
+)
 
-
-
+x = tf.compat.v1.placeholder(shape=(None, 4, 4), dtype='float32')
+y = Flatten()(x)
 
