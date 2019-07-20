@@ -4,7 +4,7 @@ import numpy as np
 from keras.layers import Embedding, Input, LSTM, Dropout, Dense, Bidirectional
 from keras.models import Model, load_model
 
-from crf import CRFLayer, create_custom_objects
+from .crf import CRFLayer, create_custom_objects
 
 
 class LayerTest(unittest.TestCase):
@@ -31,8 +31,14 @@ class LayerTest(unittest.TestCase):
         s = np.asarray([maxlen] * batch_size, dtype='int32')
 
         # Build a model.
+        # Input -  Instantiate a Keras tensor.
+        # batch_shape = (2, 2)
+        # batch_shape - the expected input will be batches of (2, 2) dimensional vectors
         word_ids = Input(batch_shape=(batch_size, maxlen), dtype='int32')
+        # Embedding convert positive integers to the dense vectors [[4],[20]] -> [[0.25, 0.1], [0.6, -0.2]]
+        # (vocab_size, output_dim); output_dim -  dimension of the dense embedding = number_of_classes
         word_embeddings = Embedding(vocab_size, n_classes)(word_ids)
+        # batch_shape=[2, 1]
         sequence_lengths = Input(batch_shape=[batch_size, 1], dtype='int32')
         crf = CRFLayer()
         pred = crf([word_embeddings, sequence_lengths])

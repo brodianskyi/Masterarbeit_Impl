@@ -36,13 +36,14 @@ class CRF(nn.Module):
 
     def forward(self, emissions, tags, mask=None):
         """
-        Compute the negative log-likelihood. See log_likelihood method
+        Compute the negative log-likelihood. See log_likelihood method -> -log(p(y|X))
         """
         nll = -self.log_likelihood(emissions, tags, mask=mask)
         return nll
 
     def log_likelihood(self, emissions, tags, mask=None):
         """
+        log(p(y|X))
         Compute the probability of a sequence of tags given a sequence of emissions scores
 
         Emissions(torch.Tensor):Sequence of emissions for each label.
@@ -54,6 +55,8 @@ class CRF(nn.Module):
         ELSE Shape == (seq_len, batch_size)
 
         Mask (torch.FloatTensor, optional): Tensor representing valid positions.
+        Ignore computation associated with pad symbol(Not valid position -> it is PAD position)
+        Example of mask matrix: ["Hi", "I", "am", "Pavel", <PAD>, <PAD>] -> [1,1,1,1,0,0]
         IF None -> all positions are considered valid.
         IF batch_first == True -> Shape == (batch_size, seq_len)
         ELSE Shape == (seq_len, batch_size)
@@ -78,7 +81,27 @@ class CRF(nn.Module):
 
         scores = self._compute_scores(emissions, tags, mask=mask)
         partition = self._compute_log_partition(emissions, mask=mask)
+        # d(L)/d(Lambda) = sum(f(x,y)) - sum(f(x,y)*p(y|x))
         return torch.sum(scores - partition)
+
+    def compute_scores(self, emissions, tags, mask):
+        """"
+        Compute the scores for a given batch of emissions with their tags
+        Args:
+            emissions (torch.Tensor): (batch_size, seq_len, nb_labels)
+            tags(torch.LongTensor): (batch_size, seq_len)
+            mask(torch.FloatTensor):(batch_size, seq_len)
+        Returns:
+            torch.Tensor:Scores for each batch
+            Shape of (batch_size, )
+        """
+        batch_size, seq_length = tags.shape
+        scores = torch.zeros(batch_size)
+
+        # save first and last tags
+        first_tags = tags[:, 0]
+        last_valid_idx = mask.int().sum(1) - 1
+        last_tags = tags.gather(1, last_valid_idx.unsqueeze(1)).squeeze()
 
 
 crf = CRF(3, 0, 2)
