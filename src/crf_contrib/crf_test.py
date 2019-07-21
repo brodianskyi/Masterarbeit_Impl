@@ -4,7 +4,7 @@ import numpy as np
 from keras.layers import Embedding, Input, LSTM, Dropout, Dense, Bidirectional
 from keras.models import Model, load_model
 
-from .crf import CRFLayer, create_custom_objects
+from src.crf_contrib.crf import CRFLayer, create_custom_objects
 
 
 class LayerTest(unittest.TestCase):
