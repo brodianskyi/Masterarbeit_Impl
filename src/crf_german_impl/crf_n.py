@@ -17,6 +17,7 @@ from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
 from keras_contrib.utils.test_utils import to_tuple
 
 
+
 class CRF(Layer):
     """An implementation of linear chain conditional random field (CRF).
 

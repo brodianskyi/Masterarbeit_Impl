@@ -1,16 +1,12 @@
 import csv
-import sys
-
-import gensim
 import numpy as np
 import pandas as pd
 from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional
 from keras.models import Model, Input
 from keras.preprocessing.sequence import pad_sequences
-from nltk.tokenize import TweetTokenizer
 from keras.utils import to_categorical
-# from keras_contrib.layers import CRF
-from src.crf_german_impl.crf_n import CRF
+# from src.crf_german_impl.crf_n import CRF
+from src.crf_german_impl.crf_impl import CRF
 from sklearn.model_selection import train_test_split
 from seqeval.metrics import f1_score, classification_report
 
