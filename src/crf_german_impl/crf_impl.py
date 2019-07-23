@@ -11,6 +11,7 @@ from keras_contrib.utils.test_utils import to_tuple
 
 class CRF(Layer):
     """
+    !!!!!! KERAS_VERSION = "2.2.3" !!!!!!!
     Learn_Mode either "join" or "marginal"
     "loses.crf_nll" for "join" and
     "losses.categorical_crossentropy" or "losses.sparse_categorical_crossentropy" for "marginal" mode
@@ -238,27 +239,35 @@ class CRF(Layer):
     def viterbi_decoding(self, X, mask=None):
         print("------Viterby_decoding------")
         # X = <Tensor, shape=(?,80,50), dtype=float32>
+        # mask =  <embedding/NotEqual:0, shape=(?,80), dtype=bool>
         # self.kernel.shape = (input_dim, units_crf=n_tags+1) = (50, 12)- (linear transform of the input)
         # self.bias.shape = (12,)
+        # ! activation=linear=kx+b ! - K.dot - multiplication of two tensor
+        # ! input_energy = activation((X*self.kernel) + self.bias) = activation(kx+b)
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
         if self.use_boundary:
             input_energy = self.add_boundary_energy(
                 input_energy, mask, self.left_boundary, self.right_boundary)
-        return 0
+        return input_energy
 
     def add_boundary_energy(self, energy, mask, start, end):
         # expand_dims(tensor, axis=0)
         # axis: Position where to add a new axis to the tensor
+        # start_old_shape=() -> expand_dims -> start_expand_shape=(1,1,12); dtype=float32
         start = K.expand_dims(K.expand_dims(start, 0), 0)
+        # end_old_shape=() -> expand_dims -> end_expand_shape=(1,1,12); dtype=float32
         end = K.expand_dims(K.expand_dims(end, 0), 0)
         if mask is None:
             energy = K.concatenate([energy[:, :1, :] + start, energy[:, 1:, :]], axis=1)
             energy = K.concatenate([energy[:, :-1, :], energy[:, -1:, :] + end], axis=1)
         else:
-            # add mask
+            # we have a mask value
             # cast -  convert a tesnsor-variable value from one type to another
+            # cast -> bool to float32
+            # expand_dims -> (?,80) -> (?,80,1)
             mask = K.expand_dims(K.cast(mask, K.floatx()))
             # K.greater(x,y) - Element-wise truth value of (x > y)
+            # (x > y) -> (mask > shift_right(mask))
             start_mask = K.cast(K.greater(mask, self.shift_right(mask)), K.floatx())
             end_mask = K.cast(K.greater(self.shift_left(mask), mask), K.floatx())
             energy = energy + start_mask * start
@@ -274,7 +283,17 @@ class CRF(Layer):
 
     @staticmethod
     def shift_right(x, offset=1):
-        # x = mask
+        # x = mask = (?,80,1) = dtype = float32
         assert offset > 0
+        # --------x[:, :1]------------
+        # offset=1, take in each string all elements until [1] -> element[0] in each string
+        # [ [[0][1][2]] [[3][4][5]] ] -> offset = 1 -> [ [[0]] [[3]] ]
+        # -----------------------------------
+        # -----------K.zeros_like(x[:, :offset])- initialize this tensor with zeros
+        # [ [[0]] [[3]] ] -> [ [[0]] [[0]] ] - now shape is (2,2,1)
+        # -----------------------------------
+        # -------------x[:, :-1]----------
+        # negative index -> [ [[0][1][2]] [[3][4][5]] ] ->  x[1,-1] = [5] - last element from the end[-1] in string[1]
+        # x[:, :-1] = [ [[2]] [[5]] ]
+        # ----------------- K.concatenate =
         return K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)
-

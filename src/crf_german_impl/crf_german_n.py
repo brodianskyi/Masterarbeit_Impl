@@ -5,25 +5,25 @@ from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional
 from keras.models import Model, Input
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils import to_categorical
-# from src.crf_german_impl.crf_n import CRF
-from src.crf_german_impl.crf_impl import CRF
+from src.crf_german_impl.crf_n import CRF
+# from src.crf_german_impl.crf_impl import CRF
 from sklearn.model_selection import train_test_split
 from seqeval.metrics import f1_score, classification_report
 
 # number of examples used in each iteration
-BATCH_SIZE = 32
+BATCH_SIZE = 10
 # number of passes through entire dataset
 EPOCHS = 3
 # length of the subsequence
-MAX_LEN = 80
+MAX_LEN = 15
 # dimension of word embedding vector
-EMBEDDING = 300
+EMBEDDING = 50
 
 data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span", "EMB_Span", "Sentence_number"],
                    delimiter="\t",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
 
-data = data.head(300)
+data = data.head(200)
 emb_tags = list(set(data["EMB_Span"]))
 n_emb_tags = len(emb_tags)
 
@@ -132,8 +132,8 @@ for word, i in word2idx.items():
 input = Input(shape=(MAX_LEN,))
 # input_dim = n_word + PAD + UNK - size of the vocabulary
 model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
-model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.5))(model)
-model = TimeDistributed(Dense(50, activation="relu"))(model)
+model = Bidirectional(LSTM(units=15, return_sequences=True, recurrent_dropout=0.5))(model)
+model = TimeDistributed(Dense(15, activation="relu"))(model)
 # CRF Layer = n_otr_tags + PAD
 crf = CRF(n_otr_tags + 1)
 out = crf(model)
