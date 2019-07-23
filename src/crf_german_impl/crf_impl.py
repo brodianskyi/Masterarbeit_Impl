@@ -1,3 +1,4 @@
+import tensorflow as tf
 import keras
 from keras import activations
 from keras import backend as K
@@ -248,28 +249,40 @@ class CRF(Layer):
         if self.use_boundary:
             input_energy = self.add_boundary_energy(
                 input_energy, mask, self.left_boundary, self.right_boundary)
+        argmin_tables = self.recursion(input_energy, mask, return_logZ=False)
         return input_energy
 
     def add_boundary_energy(self, energy, mask, start, end):
+        # energy = activation((X*self.kernel) + self.bias) ->(?, 80, 9)
+        # mask =  <embedding/NotEqual:0, shape=(?,80), dtype=bool>
+        # start =  self.left_boundary -> (12,)
+        # end = self.right_boundary -> (12,)
         # expand_dims(tensor, axis=0)
         # axis: Position where to add a new axis to the tensor
-        # start_old_shape=() -> expand_dims -> start_expand_shape=(1,1,12); dtype=float32
+        # start_old_shape=(12,) -> expand_dims -> start_expand_shape=(1,1,12); dtype=float32
         start = K.expand_dims(K.expand_dims(start, 0), 0)
-        # end_old_shape=() -> expand_dims -> end_expand_shape=(1,1,12); dtype=float32
+        # end_old_shape=(12,) -> expand_dims -> end_expand_shape=(1,1,12); dtype=float32
         end = K.expand_dims(K.expand_dims(end, 0), 0)
         if mask is None:
             energy = K.concatenate([energy[:, :1, :] + start, energy[:, 1:, :]], axis=1)
             energy = K.concatenate([energy[:, :-1, :], energy[:, -1:, :] + end], axis=1)
         else:
             # we have a mask value
-            # cast -  convert a tesnsor-variable value from one type to another
+            # cast - convert a tesnsor-variable value from one type to another
             # cast -> bool to float32
-            # expand_dims -> (?,80) -> (?,80,1)
+            # expand_dims from (?,80) to -> mask<embedding> = (?,80,1)
             mask = K.expand_dims(K.cast(mask, K.floatx()))
-            # K.greater(x,y) - Element-wise truth value of (x > y)
-            # (x > y) -> (mask > shift_right(mask))
+            # K.greater(x,y) - Element-wise compare value of (x,y)
+            # (x > y) -> (IF mask[i] > shift_right(mask)[i] -> True)
+            # K.greater returns -> ["True", "False",...] bool tensor with the same shape as mask=shift_right_mask
+            # start_mask(?,80,9) return a tensor from bool to float -> ["True", "False",..] -> [1. 0.]
             start_mask = K.cast(K.greater(mask, self.shift_right(mask)), K.floatx())
+            # do the same for the left shift
+            # end_mask(?,80,9) return a tensor form bool to float -> ["True", "False"] -> [1. 0.]
             end_mask = K.cast(K.greater(self.shift_left(mask), mask), K.floatx())
+            # energy = activation((X*self.kernel) + self.bias) ->(?, 80, 9)
+            # start =  self.left_boundary -> <ExpandDims> shape = (1,1,9)
+            # end = self.right_boundary -> <ExpandDims>(1,1,9)
             energy = energy + start_mask * start
             energy = energy + end_mask * end
         return energy
@@ -279,6 +292,8 @@ class CRF(Layer):
         # x = mask
         assert offset > 0
         # Concatenates tensors along one dimension
+        # [ [[1],[2],[3]], [[4],[5],[6]] ] -> K.concatenate -> [ [[2],[3],[0]], [[5],[6],[0]] ]
+        # (after shifting still the same shape)
         return K.concatenate([x[:, offset:], K.zeros_like(x[:, :offset])], axis=1)
 
     @staticmethod
@@ -295,5 +310,8 @@ class CRF(Layer):
         # -------------x[:, :-1]----------
         # negative index -> [ [[0][1][2]] [[3][4][5]] ] ->  x[1,-1] = [5] - last element from the end[-1] in string[1]
         # x[:, :-1] = [ [[2]] [[5]] ]
-        # ----------------- K.concatenate =
+        # ----------------- K.concatenate------------------
+        # shape(2, 1, 4) + shape(2, 2, 4) -> exis = 1 sum over second dimension -> (2, 1+2, 4)
+        # [ [[1],[2],[3]], [[4],[5],[6]] ] -> K.concatenate -> [ [[0],[1],[2]], [[0],[4],[5]] ]
+        # (after shifting still the same shape)
         return K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)
