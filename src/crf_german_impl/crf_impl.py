@@ -150,7 +150,7 @@ class CRF(Layer):
         print("---Used version of keras = ", keras.__name__)
         # keras -> input_shape do not change
         input_shape = to_tuple(input_shape)
-        # input_shape =(None, 80, 50) -> (None, MAX_LEN = 80, Units_lstm = 50)
+        # input_shape = <class tuple>(None, 80, 50) -> (None, MAX_LEN = 80, Units_lstm = 50)
         # InputSpec - specifies the input_dim of every input to a layer
         # self.input_spec is defined in keras.layers.Layer
         # input_spec = <class "list">[InputSpec(shape=(None, 80, 50), ndim=3]
@@ -160,7 +160,7 @@ class CRF(Layer):
         # self.input_dim = 50
         self.input_dim = input_shape[-1]
         # initialize kernel_weights_matrix(linear transformation of the inputs)
-        # shape = (input_dim, units_crf=n_tags+1) = (50, 12)
+        # shape = (input_dim, units_crf=n_tags+1) = (50, 12) dtype=float32_ref
         self.kernel = self.add_weight(shape=(self.input_dim, self.units),
                                       name="kernel",
                                       initializer=self.kernel_initializer,
@@ -168,7 +168,7 @@ class CRF(Layer):
                                       constraint=self.kernel_constraint)
         # initialize chain_weights_matrix, used for CRF chain energy functions
         # shape = (units/units) = (n_tags+1/n_tags+1)
-        # shape = (12, 12)
+        # shape = (12, 12) - (units(n_otr_tags)/units) - dtype=float32_ref
         self.chain_kernel = self.add_weight(shape=(self.units, self.units),
                                             name="chain_kernel",
                                             initializer=self.chain_initializer,
@@ -176,7 +176,7 @@ class CRF(Layer):
                                             constraint=self.chain_constraint)
         # self.use_bias = True
         if self.use_bias:
-            # shape = (12,)
+            # shape = (12,) - dtype=float32_ref
             self.bias = self.add_weight(shape=(self.units,),
                                         name="bias",
                                         initializer=self.bias_initializer,
@@ -187,12 +187,13 @@ class CRF(Layer):
 
         # self.use_boundary = True
         if self.use_boundary:
-            # shape = (12,)
+            # shape = (12,) - dtype=float32_ref
             self.left_boundary = self.add_weight(shape=(self.units,),
                                                  name="left_boundary",
                                                  initializer=self.boundary_initializer,
                                                  regularizer=self.boundary_regularizer,
                                                  constraint=self.boundary_constraint)
+            # shape = (12,) - dtype=float32_ref
             self.right_boundary = self.add_weight(shape=(self.units,),
                                                   name="right_boundary",
                                                   initializer=self.boundary_initializer,
@@ -206,9 +207,10 @@ class CRF(Layer):
         """
         Layer logic implementation (learning_mode/test_mode)
         """
+        # input_shape(from def build) = <class tuple>(None, 80, 50)
         # X = <Tensor, shape=(?,80,50), dtype=float32>
         # Input mask to CRF must have dim=2 if not None
-        # mask = <embedding/NotEqual:0, shape=(?,80), dtype=bool>
+        # mask = shape=(?,80), dtype=bool>
         if mask is not None:
             assert K.ndim(mask) == 2
 
@@ -240,23 +242,26 @@ class CRF(Layer):
     def viterbi_decoding(self, X, mask=None):
         print("------Viterby_decoding------")
         # X = <Tensor, shape=(?,80,50), dtype=float32>
-        # mask =  <embedding/NotEqual:0, shape=(?,80), dtype=bool>
-        # self.kernel.shape = (input_dim, units_crf=n_tags+1) = (50, 12)- (linear transform of the input)
-        # self.bias.shape = (12,)
+        # mask = shape=(?,80), dtype=bool>
+        # self.kernel= (input_dim, units_crf=n_tags+1) = (50, 12)- dtype=float32_ref (linear transform of the input)
+        # self.bias.shape = (12,); dtype=float32_ref
         # ! activation=linear=kx+b ! - K.dot - multiplication of two tensor
         # ! input_energy = activation((X*self.kernel) + self.bias) = activation(kx+b)
+        # input_energy shape=(?,80,12); dtype=float32
+        # activation(K.dot( X=(?,80,50)_dtype=float32 * kernel(50, 12)- dtype=float32) + bias(12,); dtype=float32)=(?,80,12)_dtype=float32
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
         if self.use_boundary:
+            # input_energy - (?, 80, 12) float32
             input_energy = self.add_boundary_energy(
                 input_energy, mask, self.left_boundary, self.right_boundary)
         argmin_tables = self.recursion(input_energy, mask, return_logZ=False)
         return input_energy
 
     def add_boundary_energy(self, energy, mask, start, end):
-        # energy = activation((X*self.kernel) + self.bias) ->(?, 80, 9)
-        # mask =  <embedding/NotEqual:0, shape=(?,80), dtype=bool>
-        # start =  self.left_boundary -> (12,)
-        # end = self.right_boundary -> (12,)
+        # energy = activation((X*self.kernel) + self.bias) ->(?, 80, 12)
+        # mask =  <shape=(?,80), dtype=bool>
+        # start =  self.left_boundary -> (12,) float32
+        # end = self.right_boundary -> (12,) float32
         # expand_dims(tensor, axis=0)
         # axis: Position where to add a new axis to the tensor
         # start_old_shape=(12,) -> expand_dims -> start_expand_shape=(1,1,12); dtype=float32
@@ -275,17 +280,59 @@ class CRF(Layer):
             # K.greater(x,y) - Element-wise compare value of (x,y)
             # (x > y) -> (IF mask[i] > shift_right(mask)[i] -> True)
             # K.greater returns -> ["True", "False",...] bool tensor with the same shape as mask=shift_right_mask
-            # start_mask(?,80,9) return a tensor from bool to float -> ["True", "False",..] -> [1. 0.]
+            # start_mask(?,80,1) return a tensor from bool to float -> ["True", "False",..] -> [1. 0.]
             start_mask = K.cast(K.greater(mask, self.shift_right(mask)), K.floatx())
             # do the same for the left shift
-            # end_mask(?,80,9) return a tensor form bool to float -> ["True", "False"] -> [1. 0.]
+            # end_mask(?,80,1) return a tensor form bool to float -> ["True", "False"] -> [1. 0.]
             end_mask = K.cast(K.greater(self.shift_left(mask), mask), K.floatx())
-            # energy = activation((X*self.kernel) + self.bias) ->(?, 80, 9)
-            # start =  self.left_boundary -> <ExpandDims> shape = (1,1,9)
-            # end = self.right_boundary -> <ExpandDims>(1,1,9)
+            # energy = activation((X*self.kernel) + self.bias) ->(?, 80, 12) float32
+            # start =  self.left_boundary -> <ExpandDims> shape = (1,1,12) float32
+            # start_mask = (?,80,1) float32
+            # end = self.right_boundary -> <ExpandDims>(1,1,12) float32
+            # end_mask(?,80,1) float32
+            # energy = energy + start_mask/end_mask * start/end = (?, 80, 12) float32
             energy = energy + start_mask * start
             energy = energy + end_mask * end
         return energy
+
+    def recursion(self, input_energy, mask=None, go_backwards=False,
+                  return_sequences=True, return_logZ=True, input_length=None):
+        """
+        Forward (alpha) or backward(beta) recursion
+        If "return_logZ=True", compute the logZ, the normalization constant
+        If "return_logZ=False", compute the Viterbi best path lookup table
+        """
+        # !------------------------------------------------------------!
+        # not in the following  `prev_target_val` has shape = (B, F)
+        # where B = batch_size, F = output feature dim
+        # !-----------------------------------------------------------!
+        # input_energy - (?, 80, 12) float32
+        # chain_energy-shape = (12, 12) - (n_otr_tags+1)/(n_otr_tags+1) - dtype = float32_ref
+        # number of features = n_otr_tags+1=n_units; shape = (F,F)
+        chain_energy = self.chain_kernel
+        # chain_energy_(1,12,12) -> expand to shape -> (1, F, F): F=num of output features. 1st F is for t-1, 2nd F for t
+        chain_energy = K.expand_dims(chain_energy, 0)
+        # shape=(B, F), dtype = float32
+        # take [0] element in each string -> from (?, 80, 12) to (?, 12)
+        # [ [[1,2,3],[3,4,5]],[ [5,6,7],[7,8,9]] ] -> (2,2,3) -> [[1,2,3][5,6,7]] -> prev_target_val shape = (2,3)
+        # previous_target_value to zero -> if we in position [1] init  [0] to zero
+        prev_target_val = K.zeros_like(input_energy[:, 0, :])
+
+        if go_backwards:
+            # [ [[1,2,3],[3,4,5]],[ [5,6,7],[7,8,9]] ] -> k.reverse, axis=1 -> [ [[3,4,5],[1,2,3]],[ [7,8,9],[5,6,7]] ]
+            # reverse order in axis=1
+            input_energy = K.reverse(input_energy, 1)
+            if mask is not None:
+                mask = K.reverse(mask, 1)
+        # K.zeros_like(prev_target_val[:, :1]) -> prev_target_val shape = (2,3) -> take first element in each string
+        # K.zeros_like(prev_target_val[:, :1]) -> from (2,3) to  K.zeros_like_shape - (2,1)
+        # initial_state - array[ prev_target_val shape = (2,3), K.zeros_like_shape - (2,1)]
+        # initial_state  array [shape(2,3), (2,1)]
+        initial_states = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]
+        # chain_energy->(1, F, F)->shape(1,12,12)
+        constraints = [chain_energy]
+
+
 
     @staticmethod
     def shift_left(x, offset=1):

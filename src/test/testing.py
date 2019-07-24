@@ -6,13 +6,15 @@ my_tensor = tf.constant(
         [
             [1, 2, 3, 4],
             [5, 6, 7, 8],
-            [9, 10, 11, 12]
+            [9, 10, 11, 12],
+            [12, 13, 14, 15]
         ]
         ,
         [
             [13, 14, 15, 16],
             [17, 18, 19, 20],
             [21, 22, 23, 24],
+            [25, 26, 27, 28]
         ]
     ]
     , dtype="int32"
@@ -32,16 +34,28 @@ offset_minus = my_tensor[:, :-1]
 # print("--offset_plus--", sess.run(offset_plus))
 # print("zeros_like", sess.run(zeros_like))
 # print("offset_minus", sess.run(offset_minus))
-shift_tensor_right = K.concatenate([zeros_like, offset_minus], axis=1)
-print("shift_tensor_right", sess.run(shift_tensor_right))
+# shift_tensor_right = K.concatenate([zeros_like, offset_minus], axis=1)
+# print("shift_tensor_right", sess.run(shift_tensor_right))
 # print("concat_shape", )
 #print(sess.run(concatenate))
 
 # -----------start_mask = K.cast(K.greater(mask, self.shift_right(mask)), K.floatx())---
 # (my_tensor > shift_tensor_right)
-greater = K.cast(K.greater(my_tensor, shift_tensor_right), K.floatx())
-print(sess.run(greater))
+# greater = K.cast(K.greater(my_tensor, shift_tensor_right), K.floatx())
+# print(sess.run(greater))
 
+# expand_tensr = K.expand_dims(my_tensor, 1)
+# print((sess.run(expand_tensr)))
+# print("normal", my_tensor.shape)
+# print("expand", expand_tensr.shape)
+prev_target_val = K.zeros_like(my_tensor[:, 0, :])
+prev_target_val_k = K.zeros_like(prev_target_val[:, :1])
+print(sess.run(prev_target_val))
+print(prev_target_val.shape)
+print(sess.run(prev_target_val_k))
+print(prev_target_val_k.shape)
+initial_state = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]
+print("---", sess.run(initial_state))
 sess.close()
 
 

@@ -1,28 +1,19 @@
 import unittest
-import tensorflow as tf
-from keras import backend as K
-from src.crf_german_impl.crf_impl import CRF
+import numpy as np
+from keras_contrib.layers import CRF
+from keras_contrib.losses import crf_loss
+from keras_contrib.metrics import crf_viterbi_accuracy
+
 
 class LayerTest(unittest.TestCase):
-
     def test_crf_layer(self):
-        n_labels = 12
-        energy = tf.constant(
-            [
-                [
-                    [1, 2, 3, 4],
-                    [5, 6, 7, 8],
-                    [9, 10, 11, 12]
-                ]
-                ,
-                [
-                    [13, 14, 15, 16],
-                    [17, 18, 19, 20],
-                    [21, 22, 23, 24],
-                ]
-            ]
-            , dtype="int32"
-        )
-        energy = K.cast(energy, K.floatx())
-        crf = CRF(n_labels)
-        crf.add_boundary_energy(energy, energy, energy, energy)
+        # Hyperparameter setting
+        vocab_size = 20
+        n_classes = 11
+        batch_size = 2
+        maxlen = 2
+
+        # Random features
+        x = np.random.randint(1, vocab_size, size=(batch_size, maxlen))
+        # Random tag indices
+        y = np.random.randint(n_classes, size=(batch_size, maxlen))

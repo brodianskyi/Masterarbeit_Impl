@@ -5,25 +5,28 @@ from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional
 from keras.models import Model, Input
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils import to_categorical
+from keras.models import Sequential
 # from src.crf_german_impl.crf_n import CRF
 from src.crf_german_impl.crf_impl import CRF
 from sklearn.model_selection import train_test_split
 from seqeval.metrics import f1_score, classification_report
+from src.crf_german_impl.crf_loss_n import crf_loss
+from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
 
 # number of examples used in each iteration
 BATCH_SIZE = 250
 # number of passes through entire dataset
-EPOCHS = 1
+EPOCHS = 3
 # length of the subsequence
 MAX_LEN = 80
 # dimension of word embedding vector
-EMBEDDING = 300
+EMBEDDING = 50
 
 data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span", "EMB_Span", "Sentence_number"],
                    delimiter="\t",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
 
-data = data.head(200)
+data = data.head(300)
 emb_tags = list(set(data["EMB_Span"]))
 n_emb_tags = len(emb_tags)
 
@@ -129,23 +132,27 @@ for word, i in word2idx.items():
             embedding_matrix[i] = embedding_vector
 '''
 # Model definition
-input = Input(shape=(MAX_LEN,))
+# input = Input(shape=(MAX_LEN,))
 # input_dim = n_word + PAD + UNK - size of the vocabulary
-model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
-model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.5))(model)
-model = TimeDistributed(Dense(50, activation="relu"))(model)
+# model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
+# model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.5))(model)
+# model = TimeDistributed(Dense(50, activation="relu"))(model)
 # CRF Layer = n_otr_tags + PAD
+model = Sequential()
+# input_dim = Input(shape=(MAX_LEN,))
+embeddings = Embedding(input_dim=n_words+2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)
+model.add(embeddings)
 crf = CRF(n_otr_tags + 1)
-out = crf(model)
-model = Model(input, out)
-model.summary()
+model.add(crf)
+#out = crf(model)
+#model = Model(input, out)
+# model.summary()
 # set pre trained weight into embedding layer
 # model.layers[1].set_weights([embedding_matrix])
 # model.layers[1].trainable = False
-
-model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
+# model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
+model.compile("adam", loss=crf_loss, metrics=[crf_viterbi_accuracy])
 model.summary()
-
 history = model.fit(X_tr, np.array(y_tr), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
 # new version
 test_pred = model.predict(X_te, verbose=1)
