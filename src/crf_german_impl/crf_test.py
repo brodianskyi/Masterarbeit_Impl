@@ -1,19 +1,19 @@
 import unittest
 import numpy as np
-from keras_contrib.layers import CRF
+from src.crf_german_impl.crf_impl import CRF
 from keras_contrib.losses import crf_loss
 from keras_contrib.metrics import crf_viterbi_accuracy
+import src.crf_german_impl.data_source as d_src
 
 
 class LayerTest(unittest.TestCase):
-    def test_crf_layer(self):
-        # Hyperparameter setting
-        vocab_size = 20
-        n_classes = 11
-        batch_size = 2
-        maxlen = 2
 
-        # Random features
-        x = np.random.randint(1, vocab_size, size=(batch_size, maxlen))
-        # Random tag indices
-        y = np.random.randint(n_classes, size=(batch_size, maxlen))
+    def test_crf_layer(self):
+        n_tags = 12
+
+        crf = CRF(n_tags + 1)
+        # build(input_shape)
+        crf.build(d_src.input_shape)
+        # call(X, mask)
+        # shape of X = input_shape
+        crf.call(d_src.X, d_src.mask)

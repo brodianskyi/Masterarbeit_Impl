@@ -8,6 +8,7 @@ from keras import regularizers
 from keras.layers import Layer
 from keras.layers import InputSpec
 from keras_contrib.utils.test_utils import to_tuple
+import src.crf_german_impl.data_source as dt_src
 
 
 class CRF(Layer):
@@ -74,6 +75,7 @@ class CRF(Layer):
     Unrolling is only suitable for short sequences
     If false (by default) - symbolic loop will be used
     """
+
 
     def __init__(self, units,
                  learn_mode="join",
@@ -142,14 +144,16 @@ class CRF(Layer):
         """
         Create the layer weights
         """
-        # input_shape = (None, 80, 50)
+        # input_shape =<class tuple> (None, 80, 50)
         # fix an inconsistency between "keras" and "tensorflow.keras"
         # if tf.keras -> input_shape is tuple with "Dimensions" objects
         # if keras -> input_shape is tuple of ints or "None"
         # keras.__name__ = keras
         print("---Used version of keras = ", keras.__name__)
         # keras -> input_shape do not change
+        #input_shape = dt_src.input_shape
         input_shape = to_tuple(input_shape)
+        # input_shape = output from Enbedding layer (batch_size, max_seq_len, embedding_dim)
         # input_shape = <class tuple>(None, 80, 50) -> (None, MAX_LEN = 80, Units_lstm = 50)
         # InputSpec - specifies the input_dim of every input to a layer
         # self.input_spec is defined in keras.layers.Layer
@@ -158,6 +162,7 @@ class CRF(Layer):
         self.input_spec = [InputSpec(shape=input_shape)]
         # self.input_dim initialized in __init__
         # self.input_dim = 50
+        # input_dim = embedding_dim
         self.input_dim = input_shape[-1]
         # initialize kernel_weights_matrix(linear transformation of the inputs)
         # shape = (input_dim, units_crf=n_tags+1) = (50, 12) dtype=float32_ref
@@ -210,7 +215,7 @@ class CRF(Layer):
         # input_shape(from def build) = <class tuple>(None, 80, 50)
         # X = <Tensor, shape=(?,80,50), dtype=float32>
         # Input mask to CRF must have dim=2 if not None
-        # mask = shape=(?,80), dtype=bool>
+        # mask<embedding> = shape=(?,80), dtype=bool>
         if mask is not None:
             assert K.ndim(mask) == 2
 
