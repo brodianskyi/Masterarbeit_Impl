@@ -8,7 +8,7 @@ from keras import regularizers
 from keras.layers import Layer
 from keras.layers import InputSpec
 from keras_contrib.utils.test_utils import to_tuple
-import src.crf_german_impl.data_source as dt_src
+
 
 
 class CRF(Layer):
@@ -76,7 +76,6 @@ class CRF(Layer):
     If false (by default) - symbolic loop will be used
     """
 
-
     def __init__(self, units,
                  learn_mode="join",
                  test_mode=None,
@@ -100,6 +99,7 @@ class CRF(Layer):
                  unroll=False,
                  **kwargs):
         super(CRF, self).__init__(**kwargs)
+        self.inter_ses = tf.InteractiveSession()
         self.supports_masking = True
         # units = n_otr_tags + 1 = 12
         self.units = units
@@ -254,7 +254,13 @@ class CRF(Layer):
         # ! input_energy = activation((X*self.kernel) + self.bias) = activation(kx+b)
         # input_energy shape=(?,80,12); dtype=float32
         # activation(K.dot( X=(?,80,50)_dtype=float32 * kernel(50, 12)- dtype=float32) + bias(12,); dtype=float32)=(?,80,12)_dtype=float32
+        print("--X-", self.inter_ses.run(X))
+        print("--self.kernel ", self.inter_ses.run(self.kernel))
+        print("---K.dot(X, kernel) ", self.inter_ses.run(K.dot(X, self.kernel)))
+        print("---self.bias ", self.inter_ses.run(self.bias))
+        print("---K.dot(X, self.kernel) + self.bias) ", self.inter_ses.run(K.dot(X, self.kernel) + self.bias))
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
+        print("----input_energy", self.inter_ses.run(input_energy))
         if self.use_boundary:
             # input_energy - (?, 80, 12) float32
             input_energy = self.add_boundary_energy(
@@ -270,9 +276,14 @@ class CRF(Layer):
         # expand_dims(tensor, axis=0)
         # axis: Position where to add a new axis to the tensor
         # start_old_shape=(12,) -> expand_dims -> start_expand_shape=(1,1,12); dtype=float32
+        print("start_shape before expand = ", self.left_boundary.shape, "--start=left_boundary before expand=", self.inter_ses.run(start))
         start = K.expand_dims(K.expand_dims(start, 0), 0)
+        print("shape_start= ", start.shape, " --start=left_boundary= ", self.inter_ses.run(start))
         # end_old_shape=(12,) -> expand_dims -> end_expand_shape=(1,1,12); dtype=float32
+        print("end_shape before expand =", self.right_boundary.shape, "---end=right_before expand=", self.inter_ses.run(end))
         end = K.expand_dims(K.expand_dims(end, 0), 0)
+        print("shape_end= ", end.shape, "end=right_boundary= ", self.inter_ses.run(end))
+
         if mask is None:
             energy = K.concatenate([energy[:, :1, :] + start, energy[:, 1:, :]], axis=1)
             energy = K.concatenate([energy[:, :-1, :], energy[:, -1:, :] + end], axis=1)
@@ -367,3 +378,4 @@ class CRF(Layer):
         # [ [[1],[2],[3]], [[4],[5],[6]] ] -> K.concatenate -> [ [[0],[1],[2]], [[0],[4],[5]] ]
         # (after shifting still the same shape)
         return K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)
+
