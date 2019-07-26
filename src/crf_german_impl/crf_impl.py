@@ -265,6 +265,7 @@ class CRF(Layer):
             # input_energy - (?, 80, 12) float32
             input_energy = self.add_boundary_energy(
                 input_energy, mask, self.left_boundary, self.right_boundary)
+        print("input_energy shape= ", input_energy.shape, "input_energy = ", self.inter_ses.run(input_energy))
         argmin_tables = self.recursion(input_energy, mask, return_logZ=False)
         return input_energy
 
@@ -292,23 +293,24 @@ class CRF(Layer):
             # cast - convert a tesnsor-variable value from one type to another
             # cast -> bool to float32
             # expand_dims from (?,80) to -> mask<embedding> = (?,80,1)
+            print("mask= ", mask.shape, "mask = ", self.inter_ses.run(mask))
             mask = K.expand_dims(K.cast(mask, K.floatx()))
+            print("mask after expand shape = ", mask.shape, "tensor = ", self.inter_ses.run(mask))
             # K.greater(x,y) - Element-wise compare value of (x,y)
             # (x > y) -> (IF mask[i] > shift_right(mask)[i] -> True)
             # K.greater returns -> ["True", "False",...] bool tensor with the same shape as mask=shift_right_mask
             # start_mask(?,80,1) return a tensor from bool to float -> ["True", "False",..] -> [1. 0.]
             start_mask = K.cast(K.greater(mask, self.shift_right(mask)), K.floatx())
+            print("start_mask shape= ", start_mask.shape, "start_mask = ", self.inter_ses.run(start_mask))
             # do the same for the left shift
             # end_mask(?,80,1) return a tensor form bool to float -> ["True", "False"] -> [1. 0.]
             end_mask = K.cast(K.greater(self.shift_left(mask), mask), K.floatx())
-            # energy = activation((X*self.kernel) + self.bias) ->(?, 80, 12) float32
-            # start =  self.left_boundary -> <ExpandDims> shape = (1,1,12) float32
-            # start_mask = (?,80,1) float32
-            # end = self.right_boundary -> <ExpandDims>(1,1,12) float32
-            # end_mask(?,80,1) float32
-            # energy = energy + start_mask/end_mask * start/end = (?, 80, 12) float32
+            print("end_mask shape= ", end_mask.shape, "end_mask = ", self.inter_ses.run(end_mask))
+            # energy = input_energy = activation; start = left_boundary; end = right_boundary
             energy = energy + start_mask * start
+            print("energy+start shape= ", energy.shape, "energy+start= ", self.inter_ses.run(energy))
             energy = energy + end_mask * end
+            print("energy+end= ", energy.shape, "energy+end= ", self.inter_ses.run(energy))
         return energy
 
     def recursion(self, input_energy, mask=None, go_backwards=False,
@@ -326,14 +328,17 @@ class CRF(Layer):
         # chain_energy-shape = (12, 12) - (n_otr_tags+1)/(n_otr_tags+1) - dtype = float32_ref
         # number of features = n_otr_tags+1=n_units; shape = (F,F)
         chain_energy = self.chain_kernel
+        print("chain_energy shape= ", chain_energy.shape, "chain_energy= ", self.inter_ses.run(chain_energy))
         # chain_energy_(1,12,12) -> expand to shape -> (1, F, F): F=num of output features. 1st F is for t-1, 2nd F for t
         chain_energy = K.expand_dims(chain_energy, 0)
+        print("chain energy expand shape= ", chain_energy.shape, "chain energy expand= ", self.inter_ses.run(chain_energy))
         # shape=(B, F), dtype = float32
         # take [0] element in each string -> from (?, 80, 12) to (?, 12)
         # [ [[1,2,3],[3,4,5]],[ [5,6,7],[7,8,9]] ] -> (2,2,3) -> [[1,2,3][5,6,7]] -> prev_target_val shape = (2,3)
         # previous_target_value to zero -> if we in position [1] init  [0] to zero
         prev_target_val = K.zeros_like(input_energy[:, 0, :])
-
+        print("prev_target_val shape= ", prev_target_val.shape, "prev_target_val", self.inter_ses.run(prev_target_val))
+        # go_backward = False
         if go_backwards:
             # [ [[1,2,3],[3,4,5]],[ [5,6,7],[7,8,9]] ] -> k.reverse, axis=1 -> [ [[3,4,5],[1,2,3]],[ [7,8,9],[5,6,7]] ]
             # reverse order in axis=1
@@ -345,10 +350,31 @@ class CRF(Layer):
         # initial_state - array[ prev_target_val shape = (2,3), K.zeros_like_shape - (2,1)]
         # initial_state  array [shape(2,3), (2,1)]
         initial_states = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]
+        print("initial_states length= ", len(initial_states), "initial_states= ", self.inter_ses.run(initial_states))
         # chain_energy->(1, F, F)->shape(1,12,12)
-        constraints = [chain_energy]
+        constants = [chain_energy]
+        print("constants= ", len(constants), "energy+end= ", self.inter_ses.run(constants))
+        if mask is not None:
+            mask2 = K.cast(K.concatenate([mask, K.zeros_like(mask[:, :1])], axis=1),
+                           K.floatx())
+            constants.append(mask2)
+
+        def _step(input_energy_i, states):
+            return self.step(input_energy_i, states, return_logZ)
+
+        target_val_last, target_val_seq, _ = K.rnn(_step, input_energy,
+                                                   initial_states,
+                                                   constants=constants,
+                                                   input_length=input_length,
+                                                   unroll=self.unroll)
+        print("target_val_last= ", self.inter_ses.run(target_val_last))
+        print("target_val_seq= ", self.inter_ses.run(target_val_seq))
 
 
+        return "recursion"
+
+    def step(self, input_energy_t, states, return_logZ=True):
+        return 0
 
     @staticmethod
     def shift_left(x, offset=1):

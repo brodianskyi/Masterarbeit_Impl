@@ -73,8 +73,8 @@ offset_minus = my_tensor[:, :-1]
 # k_produkt = dt_source.bias
 #print(sess.run(k_product))
 
-k_product = dt_source.bias
-print("shape_start= ", k_product.shape, " --start=left_boundary= ", sess.run(k_product))
+chain_kernel = tf.constant(np.arange(1, 17, dtype=np.float32), shape=[4, 4])
+print("shape_start= ", sess.run(chain_kernel))
 
 sess.close()
 

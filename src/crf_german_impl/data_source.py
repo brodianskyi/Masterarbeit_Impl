@@ -37,6 +37,9 @@ mask = tf.constant([[True, True, False, True, False], [False, True, True, False,
 # shape = (embedding_dim, n_tags) -> shape=(3, 4)
 kernel = tf.constant(np.arange(1, 13, dtype=np.float32), shape=[3, 4])
 
+# shape = (n_tags, n_tags) -> (4, 4)
+chain_kernel = tf.constant(np.arange(1, 17, dtype=np.float32), shape=[4, 4])
+
 # shape= (n_tags,) -> (4,)
 bias = tf.constant(np.arange(1, 5, dtype=np.float32), shape=[4, ])
 
