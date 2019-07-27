@@ -1,14 +1,15 @@
-import tensorflow as tf
+import sys
+
 import keras
+import tensorflow as tf
 from keras import activations
 from keras import backend as K
 from keras import constraints
 from keras import initializers
 from keras import regularizers
-from keras.layers import Layer
 from keras.layers import InputSpec
+from keras.layers import Layer
 from keras_contrib.utils.test_utils import to_tuple
-
 
 
 class CRF(Layer):
@@ -100,6 +101,8 @@ class CRF(Layer):
                  **kwargs):
         super(CRF, self).__init__(**kwargs)
         self.inter_ses = tf.InteractiveSession()
+        self.oldStdout = sys.stdout
+        self.output_file = open("output.txt", "w")
         self.supports_masking = True
         # units = n_otr_tags + 1 = 12
         self.units = units
@@ -151,7 +154,7 @@ class CRF(Layer):
         # keras.__name__ = keras
         print("---Used version of keras = ", keras.__name__)
         # keras -> input_shape do not change
-        #input_shape = dt_src.input_shape
+        # input_shape = dt_src.input_shape
         input_shape = to_tuple(input_shape)
         # input_shape = output from Enbedding layer (batch_size, max_seq_len, embedding_dim)
         # input_shape = <class tuple>(None, 80, 50) -> (None, MAX_LEN = 80, Units_lstm = 50)
@@ -254,18 +257,19 @@ class CRF(Layer):
         # ! input_energy = activation((X*self.kernel) + self.bias) = activation(kx+b)
         # input_energy shape=(?,80,12); dtype=float32
         # activation(K.dot( X=(?,80,50)_dtype=float32 * kernel(50, 12)- dtype=float32) + bias(12,); dtype=float32)=(?,80,12)_dtype=float32
-        print("--X-", self.inter_ses.run(X))
-        print("--self.kernel ", self.inter_ses.run(self.kernel))
-        print("---K.dot(X, kernel) ", self.inter_ses.run(K.dot(X, self.kernel)))
-        print("---self.bias ", self.inter_ses.run(self.bias))
-        print("---K.dot(X, self.kernel) + self.bias) ", self.inter_ses.run(K.dot(X, self.kernel) + self.bias))
+        sys.stdout = self.output_file
+        self.format_print("X", X)
+        self.format_print("self.kernel", self.kernel)
+        self.format_print("K.dot(X, kernel)", K.dot(X, self.kernel))
+        self.format_print("self.bias", self.bias)
+        self.format_print("(K.dot(X, self.kernel) + self.bias)", K.dot(X, self.kernel) + self.bias)
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
-        print("----input_energy", self.inter_ses.run(input_energy))
+        self.format_print("input_energy=activation(K.dot(X, self.kernel) + self.bias)", input_energy)
         if self.use_boundary:
             # input_energy - (?, 80, 12) float32
             input_energy = self.add_boundary_energy(
                 input_energy, mask, self.left_boundary, self.right_boundary)
-        print("input_energy shape= ", input_energy.shape, "input_energy = ", self.inter_ses.run(input_energy))
+        self.format_print("input_energy add boundary energy", input_energy)
         argmin_tables = self.recursion(input_energy, mask, return_logZ=False)
         return input_energy
 
@@ -277,13 +281,13 @@ class CRF(Layer):
         # expand_dims(tensor, axis=0)
         # axis: Position where to add a new axis to the tensor
         # start_old_shape=(12,) -> expand_dims -> start_expand_shape=(1,1,12); dtype=float32
-        print("start_shape before expand = ", self.left_boundary.shape, "--start=left_boundary before expand=", self.inter_ses.run(start))
+        self.format_print("start before expand", start)
         start = K.expand_dims(K.expand_dims(start, 0), 0)
-        print("shape_start= ", start.shape, " --start=left_boundary= ", self.inter_ses.run(start))
+        self.format_print("start after expand = left_boundary; start", start)
         # end_old_shape=(12,) -> expand_dims -> end_expand_shape=(1,1,12); dtype=float32
-        print("end_shape before expand =", self.right_boundary.shape, "---end=right_before expand=", self.inter_ses.run(end))
+        self.format_print("end_before expand", end)
         end = K.expand_dims(K.expand_dims(end, 0), 0)
-        print("shape_end= ", end.shape, "end=right_boundary= ", self.inter_ses.run(end))
+        self.format_print("end after expand=right_boundary; end", end)
 
         if mask is None:
             energy = K.concatenate([energy[:, :1, :] + start, energy[:, 1:, :]], axis=1)
@@ -293,24 +297,24 @@ class CRF(Layer):
             # cast - convert a tesnsor-variable value from one type to another
             # cast -> bool to float32
             # expand_dims from (?,80) to -> mask<embedding> = (?,80,1)
-            print("mask= ", mask.shape, "mask = ", self.inter_ses.run(mask))
+            self.format_print("mask", mask)
             mask = K.expand_dims(K.cast(mask, K.floatx()))
-            print("mask after expand shape = ", mask.shape, "tensor = ", self.inter_ses.run(mask))
+            self.format_print("mask after expand", mask)
             # K.greater(x,y) - Element-wise compare value of (x,y)
             # (x > y) -> (IF mask[i] > shift_right(mask)[i] -> True)
             # K.greater returns -> ["True", "False",...] bool tensor with the same shape as mask=shift_right_mask
             # start_mask(?,80,1) return a tensor from bool to float -> ["True", "False",..] -> [1. 0.]
             start_mask = K.cast(K.greater(mask, self.shift_right(mask)), K.floatx())
-            print("start_mask shape= ", start_mask.shape, "start_mask = ", self.inter_ses.run(start_mask))
+            self.format_print("start_mask", start_mask)
             # do the same for the left shift
             # end_mask(?,80,1) return a tensor form bool to float -> ["True", "False"] -> [1. 0.]
             end_mask = K.cast(K.greater(self.shift_left(mask), mask), K.floatx())
-            print("end_mask shape= ", end_mask.shape, "end_mask = ", self.inter_ses.run(end_mask))
+            self.format_print("end_mask", end_mask)
             # energy = input_energy = activation; start = left_boundary; end = right_boundary
             energy = energy + start_mask * start
-            print("energy+start shape= ", energy.shape, "energy+start= ", self.inter_ses.run(energy))
+            self.format_print("energy+start", energy)
             energy = energy + end_mask * end
-            print("energy+end= ", energy.shape, "energy+end= ", self.inter_ses.run(energy))
+            self.format_print("energy+end", energy)
         return energy
 
     def recursion(self, input_energy, mask=None, go_backwards=False,
@@ -321,23 +325,23 @@ class CRF(Layer):
         If "return_logZ=False", compute the Viterbi best path lookup table
         """
         # !------------------------------------------------------------!
-        # not in the following  `prev_target_val` has shape = (B, F)
+        # prev_target_val` has shape = (B, F)
         # where B = batch_size, F = output feature dim
         # !-----------------------------------------------------------!
         # input_energy - (?, 80, 12) float32
         # chain_energy-shape = (12, 12) - (n_otr_tags+1)/(n_otr_tags+1) - dtype = float32_ref
         # number of features = n_otr_tags+1=n_units; shape = (F,F)
         chain_energy = self.chain_kernel
-        print("chain_energy shape= ", chain_energy.shape, "chain_energy= ", self.inter_ses.run(chain_energy))
+        self.format_print("chain_energy", chain_energy)
         # chain_energy_(1,12,12) -> expand to shape -> (1, F, F): F=num of output features. 1st F is for t-1, 2nd F for t
         chain_energy = K.expand_dims(chain_energy, 0)
-        print("chain energy expand shape= ", chain_energy.shape, "chain energy expand= ", self.inter_ses.run(chain_energy))
+        self.format_print("chain energy expand", chain_energy)
         # shape=(B, F), dtype = float32
         # take [0] element in each string -> from (?, 80, 12) to (?, 12)
         # [ [[1,2,3],[3,4,5]],[ [5,6,7],[7,8,9]] ] -> (2,2,3) -> [[1,2,3][5,6,7]] -> prev_target_val shape = (2,3)
         # previous_target_value to zero -> if we in position [1] init  [0] to zero
         prev_target_val = K.zeros_like(input_energy[:, 0, :])
-        print("prev_target_val shape= ", prev_target_val.shape, "prev_target_val", self.inter_ses.run(prev_target_val))
+        self.format_print("prev_target_val", prev_target_val)
         # go_backward = False
         if go_backwards:
             # [ [[1,2,3],[3,4,5]],[ [5,6,7],[7,8,9]] ] -> k.reverse, axis=1 -> [ [[3,4,5],[1,2,3]],[ [7,8,9],[5,6,7]] ]
@@ -350,30 +354,60 @@ class CRF(Layer):
         # initial_state - array[ prev_target_val shape = (2,3), K.zeros_like_shape - (2,1)]
         # initial_state  array [shape(2,3), (2,1)]
         initial_states = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]
-        print("initial_states length= ", len(initial_states), "initial_states= ", self.inter_ses.run(initial_states))
+        self.format_print("initial_states", initial_states)
         # chain_energy->(1, F, F)->shape(1,12,12)
         constants = [chain_energy]
-        print("constants= ", len(constants), "energy+end= ", self.inter_ses.run(constants))
+        self.format_print("constants=[chain_energy]", constants)
         if mask is not None:
+            self.format_print("mask", mask)
+            self.format_print("K.zeros_like(mask[:, :1])", K.zeros_like(mask[:, :1]))
             mask2 = K.cast(K.concatenate([mask, K.zeros_like(mask[:, :1])], axis=1),
                            K.floatx())
+            self.format_print("mask2", mask2)
             constants.append(mask2)
+            self.format_print("constants", constants)
 
         def _step(input_energy_i, states):
             return self.step(input_energy_i, states, return_logZ)
 
+        self.format_print("input_energy", input_energy)
         target_val_last, target_val_seq, _ = K.rnn(_step, input_energy,
                                                    initial_states,
                                                    constants=constants,
                                                    input_length=input_length,
                                                    unroll=self.unroll)
-        print("target_val_last= ", self.inter_ses.run(target_val_last))
-        print("target_val_seq= ", self.inter_ses.run(target_val_seq))
-
-
         return "recursion"
 
     def step(self, input_energy_t, states, return_logZ=True):
+        # if return_logZ = False -> compute the Viterbi best path
+        print("return_logZ in step()", return_logZ)
+        self.format_print("input_energy_t", input_energy_t)
+        self.format_print("states", states)
+        self.format_print("states[:3]", states[:3])
+        prev_target_val, i, chain_energy = states[:3]
+        self.format_print("prev_target_val in step()", prev_target_val)
+        self.format_print("i in step()", i)
+        self.format_print("chain_energy in step()", chain_energy)
+        t = K.cast(i[0, 0], dtype="int32")
+        self.format_print("K.cast(i[0, 0], dtype=int32) = t", t)
+        # states[:3].length = 3
+        if len(states) > 3:
+            if K.backend() == "theano":
+                m = states[3][:, t:(t + 2)]
+            else:
+                # extract slice from a tensor -> (tensor, begin_position, size)
+                m = K.slice(states[3], [0, t], [-1, 2])
+            input_energy_t = input_energy_t * K.expand_dims(m[:, 0])
+            # (1, F, F)*(B, 1, 1) -> (B, F, F)
+            chain_energy = chain_energy * K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1]))
+        # return_logZ = False -> compute the Viterbi best path
+        if return_logZ:
+            # shapes: (1, B, F) + (B, F, 1) -> (B, F, F)
+            energy = 0
+
+        sys.stdout = self.oldStdout
+        self.output_file.close()
+
         return 0
 
     @staticmethod
@@ -405,3 +439,14 @@ class CRF(Layer):
         # (after shifting still the same shape)
         return K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)
 
+    def format_print(self, variable_name, input_data):
+        if isinstance(input_data, list):
+            return print("-" * 75, "\n" + variable_name + ".length = ", len(input_data), "\n" + variable_name + " = " +
+                         "\n", self.inter_ses.run(input_data), "\n", "-" * 75)
+        else:
+            # type = tensor
+            if input_data.shape is not None:
+                return print("-" * 75, "\n" + variable_name + ".shape = ", input_data.shape, "\n" + variable_name +
+                             " = " + "\n", self.inter_ses.run(input_data), "\n", "-" * 75)
+            else:
+                print("Unknown type can not be printed!")

@@ -74,7 +74,8 @@ offset_minus = my_tensor[:, :-1]
 #print(sess.run(k_product))
 
 chain_kernel = tf.constant(np.arange(1, 17, dtype=np.float32), shape=[4, 4])
-print("shape_start= ", sess.run(chain_kernel))
+# print("-" * 75, "\n"+"start= \n", sess.run(chain_kernel), "\n", "-" * 75)
+print("-" * 75, "\n" + "X.shape = ", chain_kernel.shape, "\n" + "X =" + "\n", sess.run(chain_kernel), "\n", "-" * 75)
 
 sess.close()
 

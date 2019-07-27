@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
-# from src.crf_german_impl.crf_impl import CRF
-from src.crf_german_impl.crf_n import CRF
+from src.crf_german_impl.crf_impl import CRF
+# from src.crf_german_impl.crf_n import CRF
 
 from keras_contrib.losses import crf_loss
 from keras_contrib.metrics import crf_viterbi_accuracy
