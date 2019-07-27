@@ -263,6 +263,7 @@ class CRF(Layer):
         self.format_print("K.dot(X, kernel)", K.dot(X, self.kernel))
         self.format_print("self.bias", self.bias)
         self.format_print("(K.dot(X, self.kernel) + self.bias)", K.dot(X, self.kernel) + self.bias)
+        # input_energy - E(y,x, features) -> probability(y,x)
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
         self.format_print("input_energy=activation(K.dot(X, self.kernel) + self.bias)", input_energy)
         if self.use_boundary:
@@ -271,6 +272,12 @@ class CRF(Layer):
                 input_energy, mask, self.left_boundary, self.right_boundary)
         self.format_print("input_energy add boundary energy", input_energy)
         argmin_tables = self.recursion(input_energy, mask, return_logZ=False)
+        self.format_print("argmin_tables = self.recursion", argmin_tables)
+        argmin_tables = K.cast(argmin_tables, "int32")
+        self.format_print("K.cast(argmin_tables, int32); argmin_tables", argmin_tables)
+
+        sys.stdout = self.oldStdout
+        self.output_file.close()
         return input_energy
 
     def add_boundary_energy(self, energy, mask, start, end):
@@ -324,6 +331,7 @@ class CRF(Layer):
         If "return_logZ=True", compute the logZ, the normalization constant
         If "return_logZ=False", compute the Viterbi best path lookup table
         """
+        # call -> argmin_tables = self.recursion(input_energy, mask, return_logZ=False)
         # !------------------------------------------------------------!
         # prev_target_val` has shape = (B, F)
         # where B = batch_size, F = output feature dim
@@ -376,21 +384,35 @@ class CRF(Layer):
                                                    constants=constants,
                                                    input_length=input_length,
                                                    unroll=self.unroll)
-        return "recursion"
+        self.format_print("target_val_last", target_val_last)
+        self.format_print("target_val_seq", target_val_seq)
+
+        # return_sequence = True (by default)
+        print("return_sequences in recursion() = ", return_sequences)
+        if return_sequences:
+            print("go_backwards in recursion() = ", go_backwards)
+            # go_backwards = False -> Forward(alpha) recursion
+            if go_backwards:
+                target_val_seq = K.reverse(target_val_seq, 1)
+            self.format_print("go_backwards = false, target_val_seq", target_val_seq)
+            return target_val_seq
+        else:
+            return target_val_last
 
     def step(self, input_energy_t, states, return_logZ=True):
         # if return_logZ = False -> compute the Viterbi best path
-        print("return_logZ in step()", return_logZ)
-        self.format_print("input_energy_t", input_energy_t)
-        self.format_print("states", states)
-        self.format_print("states[:3]", states[:3])
+        # print("return_logZ in step()", return_logZ)
+        # self.format_print("input_energy_t", input_energy_t)
+        # print("input_energy_t", self.inter_ses.run(input_energy_t))
+        # self.format_print("states", states)
+        # self.format_print("states[:3]", states[:3])
         prev_target_val, i, chain_energy = states[:3]
-        self.format_print("prev_target_val in step()", prev_target_val)
-        self.format_print("i in step()", i)
-        self.format_print("chain_energy in step()", chain_energy)
+        # self.format_print("prev_target_val in step()", prev_target_val)
+        # self.format_print("i in step()", i)
+        # self.format_print("chain_energy in step()", chain_energy)
         t = K.cast(i[0, 0], dtype="int32")
         self.format_print("K.cast(i[0, 0], dtype=int32) = t", t)
-        # states[:3].length = 3
+        print("len(states) in step", len(states))
         if len(states) > 3:
             if K.backend() == "theano":
                 m = states[3][:, t:(t + 2)]
@@ -403,12 +425,25 @@ class CRF(Layer):
         # return_logZ = False -> compute the Viterbi best path
         if return_logZ:
             # shapes: (1, B, F) + (B, F, 1) -> (B, F, F)
-            energy = 0
-
-        sys.stdout = self.oldStdout
-        self.output_file.close()
-
-        return 0
+            energy = chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2)
+            # shape: (B, F)
+            # Computes partition_function log(sum(exp(elements across dimensions of a tensor)))
+            new_target_val = K.logsumexp(-energy, 1)
+            return new_target_val, [new_target_val, i + 1]
+        else:
+            # self.format_print("input_energy_t + prev_target_val", input_energy_t + prev_target_val)
+            # self.format_print("K.expand_dims(input_energy_t + prev_target_val, 2)",
+            #                   K.expand_dims(input_energy_t + prev_target_val, 2))
+            energy = chain_energy + K.expand_dims(input_energy_t + prev_target_val, 2)
+            self.format_print("energy in step()", energy)
+            # axes=1 to find minimum values in a tensor
+            min_energy = K.min(energy, 1)
+            # self.format_print("min_energy", min_energy)
+            # self.format_print("K.argmin(energy, 1)", K.argmin(energy, 1))
+            argmin_table = K.cast(K.argmin(energy, 1), K.floatx())
+            # self.format_print("argmin_table", argmin_table)
+            # self.format_print("[min_energy, i + 1]", [min_energy, i + 1])
+            return argmin_table, [min_energy, i + 1]
 
     @staticmethod
     def shift_left(x, offset=1):
@@ -440,13 +475,12 @@ class CRF(Layer):
         return K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)
 
     def format_print(self, variable_name, input_data):
-        if isinstance(input_data, list):
+        if hasattr(input_data, "shape"):
+            return print("-" * 75, "\n" + variable_name + ".shape = ", input_data.shape, "\n" + variable_name +
+                         " = " + "\n", self.inter_ses.run(input_data), "\n", "-" * 75)
+        elif type(input_data) is list or tuple:
             return print("-" * 75, "\n" + variable_name + ".length = ", len(input_data), "\n" + variable_name + " = " +
                          "\n", self.inter_ses.run(input_data), "\n", "-" * 75)
         else:
-            # type = tensor
-            if input_data.shape is not None:
-                return print("-" * 75, "\n" + variable_name + ".shape = ", input_data.shape, "\n" + variable_name +
-                             " = " + "\n", self.inter_ses.run(input_data), "\n", "-" * 75)
-            else:
-                print("Unknown type can not be printed!")
+            print("Type of the printed data = ", type(input_data))
+            print(input_data)
