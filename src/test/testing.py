@@ -1,9 +1,9 @@
-import tensorflow as tf
-from keras import backend as K
-import numpy as np
-from keras import activations
-import src.crf_german_impl.data_source as dt_source
+from __future__ import print_function
 
+import numpy as np
+import tensorflow as tf
+
+tf.enable_eager_execution()
 my_tensor = tf.constant(
     [
         [
@@ -24,18 +24,16 @@ my_tensor = tf.constant(
     , dtype="float32"
 )
 
-
-
 # Shape = (2,3,4)
 sess = tf.InteractiveSession()
 # print(sess.run(my_tensor))
 # -----------K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)--------
 # offset_plus=(2, 1, 4)
-offset_plus = my_tensor[:, :1]
+# offset_plus = my_tensor[:, :1]
 # zeros_like_shape=(2, 1, 4)
-zeros_like = K.zeros_like(offset_plus)
+# zeros_like = K.zeros_like(offset_plus)
 # offset_minus_shape=(2, 2, 4)
-offset_minus = my_tensor[:, :-1]
+# offset_minus = my_tensor[:, :-1]
 
 # print("--offset_plus--", sess.run(offset_plus))
 # print("zeros_like", sess.run(zeros_like))
@@ -43,7 +41,7 @@ offset_minus = my_tensor[:, :-1]
 # shift_tensor_right = K.concatenate([zeros_like, offset_minus], axis=1)
 # print("shift_tensor_right", sess.run(shift_tensor_right))
 # print("concat_shape", )
-#print(sess.run(concatenate))
+# print(sess.run(concatenate))
 
 # -----------start_mask = K.cast(K.greater(mask, self.shift_right(mask)), K.floatx())---
 # (my_tensor > shift_tensor_right)
@@ -71,20 +69,22 @@ offset_minus = my_tensor[:, :-1]
 
 # k_product = K.dot(dt_source.X, dt_source.kernel) + dt_source.bias
 # k_produkt = dt_source.bias
-#print(sess.run(k_product))
+# print(sess.run(k_product))
 
 chain_kernel = tf.constant(np.arange(1, 17, dtype=np.float32), shape=[4, 4])
 # print("-" * 75, "\n"+"start= \n", sess.run(chain_kernel), "\n", "-" * 75)
-print("-" * 75, "\n" + "X.shape = ", chain_kernel.shape, "\n" + "X =" + "\n", sess.run(chain_kernel), "\n", "-" * 75)
-a = [1, 2, 3]
-b = ("apple", "banana", "cherry")
-print(type(chain_kernel))
+# print("-" * 75, "\n" + "X.shape = ", chain_kernel.shape, "\n" + "X =" + "\n", sess.run(chain_kernel), "\n", "-" * 75)
+# a = [1, 2, 3]
+# b = ("apple", "banana", "cherry")
+# print(type(chain_kernel))
 
-if type(b) is list or tuple:
-    print("loop")
+# if type(b) is list or tuple:
+#     print("loop")
+
+
+# last, values, end = K.rnn(_forward_step, inputs, initial_states)
+# print(chain_kernel.eval())
+
+print(chain_kernel)
 
 sess.close()
-
-
-
-

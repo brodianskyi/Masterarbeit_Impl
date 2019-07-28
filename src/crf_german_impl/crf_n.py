@@ -3,22 +3,23 @@ from __future__ import division
 
 import warnings
 
-from keras import backend as K
 from keras import activations
+from keras import backend as K
+from keras import constraints
 from keras import initializers
 from keras import regularizers
-from keras import constraints
-from keras.layers import Layer
 from keras.layers import InputSpec
-
-from src.crf_german_impl.crf_loss_n import crf_loss
-from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy
-from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
+from keras.layers import Layer
 from keras_contrib.utils.test_utils import to_tuple
 
+from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy
+from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
+from src.crf_german_impl.crf_loss_n import crf_loss
+import tensorflow as tf
 
 
 class CRF(Layer):
+    tf.enable_eager_execution()
     """An implementation of linear chain conditional random field (CRF).
 
     An linear chain CRF is defined to maximize the following likelihood function:
@@ -455,6 +456,7 @@ class CRF(Layer):
         # not in the following  `prev_target_val` has shape = (B, F)
         # where B = batch_size, F = output feature dim
         # Note: `i` is of float32, due to the behavior of `K.rnn`
+        print(input_energy_t.numpy())
         prev_target_val, i, chain_energy = states[:3]
         t = K.cast(i[0, 0], dtype='int32')
         if len(states) > 3:
@@ -598,5 +600,7 @@ class CRF(Layer):
                                  input_length=K.int_shape(X)[1], unroll=self.unroll)
         best_paths = K.reverse(best_paths, 1)
         best_paths = K.squeeze(best_paths, 2)
+        print(best_paths.numpy())
+        print(K.one_hot(best_paths, self.units))
 
         return K.one_hot(best_paths, self.units)

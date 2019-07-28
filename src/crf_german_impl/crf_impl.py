@@ -13,6 +13,7 @@ from keras_contrib.utils.test_utils import to_tuple
 
 
 class CRF(Layer):
+    tf.enable_eager_execution()
     """
     !!!!!! KERAS_VERSION = "2.2.3" !!!!!!!
     Learn_Mode either "join" or "marginal"
@@ -100,9 +101,9 @@ class CRF(Layer):
                  unroll=False,
                  **kwargs):
         super(CRF, self).__init__(**kwargs)
-        self.inter_ses = tf.InteractiveSession()
-        self.oldStdout = sys.stdout
-        self.output_file = open("output.txt", "w")
+        # self.inter_ses = tf.InteractiveSession()
+        # -!!!self.oldStdout = sys.stdout
+        # -!!!self.output_file = open("output.txt", "w")
         self.supports_masking = True
         # units = n_otr_tags + 1 = 12
         self.units = units
@@ -257,7 +258,7 @@ class CRF(Layer):
         # ! input_energy = activation((X*self.kernel) + self.bias) = activation(kx+b)
         # input_energy shape=(?,80,12); dtype=float32
         # activation(K.dot( X=(?,80,50)_dtype=float32 * kernel(50, 12)- dtype=float32) + bias(12,); dtype=float32)=(?,80,12)_dtype=float32
-        sys.stdout = self.output_file
+        # -!!! sys.stdout = self.output_file
         self.format_print("X", X)
         self.format_print("self.kernel", self.kernel)
         self.format_print("K.dot(X, kernel)", K.dot(X, self.kernel))
@@ -275,9 +276,8 @@ class CRF(Layer):
         self.format_print("argmin_tables = self.recursion", argmin_tables)
         argmin_tables = K.cast(argmin_tables, "int32")
         self.format_print("K.cast(argmin_tables, int32); argmin_tables", argmin_tables)
-
-        sys.stdout = self.oldStdout
-        self.output_file.close()
+        # -!!!sys.stdout = self.oldStdout
+        # -!!!self.output_file.close()
         return input_energy
 
     def add_boundary_energy(self, energy, mask, start, end):
@@ -311,17 +311,23 @@ class CRF(Layer):
             # (x > y) -> (IF mask[i] > shift_right(mask)[i] -> True)
             # K.greater returns -> ["True", "False",...] bool tensor with the same shape as mask=shift_right_mask
             # start_mask(?,80,1) return a tensor from bool to float -> ["True", "False",..] -> [1. 0.]
+            self.format_print("K.greater(mask, shift_right_mask)",
+                              K.greater(mask, self.shift_right(mask)))
             start_mask = K.cast(K.greater(mask, self.shift_right(mask)), K.floatx())
             self.format_print("start_mask", start_mask)
             # do the same for the left shift
             # end_mask(?,80,1) return a tensor form bool to float -> ["True", "False"] -> [1. 0.]
+            self.format_print("K.greater(shift_left_mask, mask)",
+                              K.greater(self.shift_left(mask), mask))
             end_mask = K.cast(K.greater(self.shift_left(mask), mask), K.floatx())
             self.format_print("end_mask", end_mask)
             # energy = input_energy = activation; start = left_boundary; end = right_boundary
+            self.format_print("start_mask * start", start_mask * start)
             energy = energy + start_mask * start
-            self.format_print("energy+start", energy)
+            self.format_print("energy + start_mask * start", energy)
             energy = energy + end_mask * end
-            self.format_print("energy+end", energy)
+            self.format_print("end_mask * end", end_mask * end)
+            self.format_print("final_energy = input_energy * start_mask * start + end_mask * end", energy)
         return energy
 
     def recursion(self, input_energy, mask=None, go_backwards=False,
@@ -401,15 +407,14 @@ class CRF(Layer):
 
     def step(self, input_energy_t, states, return_logZ=True):
         # if return_logZ = False -> compute the Viterbi best path
-        # print("return_logZ in step()", return_logZ)
-        # self.format_print("input_energy_t", input_energy_t)
-        # print("input_energy_t", self.inter_ses.run(input_energy_t))
-        # self.format_print("states", states)
-        # self.format_print("states[:3]", states[:3])
+        print("return_logZ in step()", return_logZ)
+        self.format_print("input_energy_t", input_energy_t)
+        self.format_print("states", states)
+        self.format_print("states[:3]", states[:3])
         prev_target_val, i, chain_energy = states[:3]
-        # self.format_print("prev_target_val in step()", prev_target_val)
-        # self.format_print("i in step()", i)
-        # self.format_print("chain_energy in step()", chain_energy)
+        self.format_print("prev_target_val in step()", prev_target_val)
+        self.format_print("i in step()", i)
+        self.format_print("chain_energy in step()", chain_energy)
         t = K.cast(i[0, 0], dtype="int32")
         self.format_print("K.cast(i[0, 0], dtype=int32) = t", t)
         print("len(states) in step", len(states))
@@ -431,11 +436,11 @@ class CRF(Layer):
             new_target_val = K.logsumexp(-energy, 1)
             return new_target_val, [new_target_val, i + 1]
         else:
-            # self.format_print("input_energy_t + prev_target_val", input_energy_t + prev_target_val)
-            # self.format_print("K.expand_dims(input_energy_t + prev_target_val, 2)",
-            #                   K.expand_dims(input_energy_t + prev_target_val, 2))
+            self.format_print("input_energy_t + prev_target_val", input_energy_t + prev_target_val)
+            self.format_print("K.expand_dims(input_energy_t + prev_target_val, 2)",
+                              K.expand_dims(input_energy_t + prev_target_val, 2))
             energy = chain_energy + K.expand_dims(input_energy_t + prev_target_val, 2)
-            self.format_print("energy in step()", energy)
+            # self.format_print("energy in step()", energy)
             # axes=1 to find minimum values in a tensor
             min_energy = K.min(energy, 1)
             # self.format_print("min_energy", min_energy)
@@ -452,7 +457,9 @@ class CRF(Layer):
         # Concatenates tensors along one dimension
         # [ [[1],[2],[3]], [[4],[5],[6]] ] -> K.concatenate -> [ [[2],[3],[0]], [[5],[6],[0]] ]
         # (after shifting still the same shape)
-        return K.concatenate([x[:, offset:], K.zeros_like(x[:, :offset])], axis=1)
+        shift_left_t = K.concatenate([x[:, offset:], K.zeros_like(x[:, :offset])], axis=1)
+        print("shift_left.shape", shift_left_t.shape, "shift_left = ", shift_left_t.numpy())
+        return shift_left_t
 
     @staticmethod
     def shift_right(x, offset=1):
@@ -472,15 +479,17 @@ class CRF(Layer):
         # shape(2, 1, 4) + shape(2, 2, 4) -> exis = 1 sum over second dimension -> (2, 1+2, 4)
         # [ [[1],[2],[3]], [[4],[5],[6]] ] -> K.concatenate -> [ [[0],[1],[2]], [[0],[4],[5]] ]
         # (after shifting still the same shape)
-        return K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)
+        shift_right_t = K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)
+        print("shift_right.shape", shift_right_t.shape, "shift_right = ", shift_right_t.numpy())
+        return shift_right_t
 
     def format_print(self, variable_name, input_data):
         if hasattr(input_data, "shape"):
             return print("-" * 75, "\n" + variable_name + ".shape = ", input_data.shape, "\n" + variable_name +
-                         " = " + "\n", self.inter_ses.run(input_data), "\n", "-" * 75)
+                         " = " + "\n", input_data.numpy(), "\n", "-" * 75)
         elif type(input_data) is list or tuple:
             return print("-" * 75, "\n" + variable_name + ".length = ", len(input_data), "\n" + variable_name + " = " +
-                         "\n", self.inter_ses.run(input_data), "\n", "-" * 75)
+                         "\n", input_data, "\n", "-" * 75)
         else:
             print("Type of the printed data = ", type(input_data))
-            print(input_data)
+            print(input_data.numpy())

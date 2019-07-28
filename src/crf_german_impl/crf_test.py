@@ -6,10 +6,11 @@ from src.crf_german_impl.crf_impl import CRF
 from keras_contrib.losses import crf_loss
 from keras_contrib.metrics import crf_viterbi_accuracy
 import src.crf_german_impl.data_source as d_src
+import tensorflow as tf
 
 
 class LayerTest(unittest.TestCase):
-
+    tf.enable_eager_execution()
     def test_crf_layer(self):
         n_tags = d_src.n_tags
 
