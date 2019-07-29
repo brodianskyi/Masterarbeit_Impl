@@ -25,8 +25,16 @@ my_tensor = tf.constant(
     , dtype="float32"
 )
 
+kernel = K.constant(np.arange(1, 13, dtype=np.float32), shape=[2, 6])
+# [[ 5.  6.  7.  8.]]
+# print(my_tensor[0, 1:2, :])
+# slice(input, begin, size)
+print(tf.slice(kernel, [0, 0], [-1, 2]))
+# print("expand", K.expand_dims(my_tensor))
+# print("llll", my_tensor[0, 1, 0])
 # Shape = (2,3,4)
-sess = tf.InteractiveSession()
+
+
 # print(sess.run(my_tensor))
 # -----------K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)--------
 # offset_plus=(2, 1, 4)
@@ -86,8 +94,5 @@ chain_kernel = tf.constant(np.arange(1, 17, dtype=np.float32), shape=[4, 4])
 # last, values, end = K.rnn(_forward_step, inputs, initial_states)
 # print(chain_kernel.eval())
 
-mask = tf.constant([[True, True, False, True, False], [False, True, True, False, True]], dtype="bool")
-print(mask[:, :1])
-print(K.zeros_like(mask[:, :1]))
 
-sess.close()
+

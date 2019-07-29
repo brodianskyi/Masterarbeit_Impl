@@ -6,8 +6,8 @@ from keras.models import Model, Input
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils import to_categorical
 from keras.models import Sequential
-# from src.crf_german_impl.crf_n import CRF
-from src.crf_german_impl.crf_impl import CRF
+from src.crf_german_impl.crf_n import CRF
+#from src.crf_german_impl.crf_impl import CRF
 from sklearn.model_selection import train_test_split
 from seqeval.metrics import f1_score, classification_report
 from src.crf_german_impl.crf_loss_n import crf_loss

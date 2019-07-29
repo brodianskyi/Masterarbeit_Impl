@@ -423,11 +423,25 @@ class CRF(Layer):
             if K.backend() == "theano":
                 m = states[3][:, t:(t + 2)]
             else:
-                # extract slice from a tensor -> (tensor, begin_position, size)
+                print("input=states[3]", states[3])
+                # slice(input, begin, size) if -1 - include all remaining elements
+                # size - number of elements for each dimension
                 m = K.slice(states[3], [0, t], [-1, 2])
+            self.format_print("m", m)
+            # K.expand_dims -> by_default axis = -1
+            self.format_print("m[:, 0]", m[:, 0])
+            self.format_print("K.expand_dims m[:, 0]", K.expand_dims(m[:, 0]))
+            self.format_print("input_energy_t", input_energy_t)
             input_energy_t = input_energy_t * K.expand_dims(m[:, 0])
+            self.format_print("input_energy_t", input_energy_t)
             # (1, F, F)*(B, 1, 1) -> (B, F, F)
+            self.format_print("chain_energy", chain_energy)
+            self.format_print("m[:, 1]", m[:, 1])
+            self.format_print("m[:, 0] * m[:, 1]", m[:, 0] * m[:, 1])
+            self.format_print("K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1]))",
+                              K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1])))
             chain_energy = chain_energy * K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1]))
+            self.format_print("chain_energy", chain_energy)
         # return_logZ = False -> compute the Viterbi best path
         if return_logZ:
             # shapes: (1, B, F) + (B, F, 1) -> (B, F, F)
@@ -441,9 +455,11 @@ class CRF(Layer):
             self.format_print("K.expand_dims(input_energy_t + prev_target_val, 2)",
                               K.expand_dims(input_energy_t + prev_target_val, 2))
             energy = chain_energy + K.expand_dims(input_energy_t + prev_target_val, 2)
+            self.format_print("energy", energy)
             # self.format_print("energy in step()", energy)
             # axes=1 to find minimum values in a tensor
             min_energy = K.min(energy, 1)
+            self.format_print("min_energy", min_energy)
             # self.format_print("min_energy", min_energy)
             # self.format_print("K.argmin(energy, 1)", K.argmin(energy, 1))
             argmin_table = K.cast(K.argmin(energy, 1), K.floatx())

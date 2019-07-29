@@ -294,12 +294,40 @@ start_mask([
 
 ---------------------------------------------------------------------------
 ---------------------------------------------------------------------------
-3)argmin_tables = self.recursion(input_energy, mask)
-Compute Forward Recursion for Viterbi:
-   For the computation we need to define recursion_values K.rnn with parameters: input_energy, initial_states, constants
-      For the computation of K.rnn we need to define step_function() with parameters: input_energy, initial_states
+VITERBI FORWARD RECURSION:
+3) argmin_tables = self.recursion(input_energy, mask)
+Input parameters
 
-  a) input_energy = (2, 5, 4)=
+     a) input_energy = shape(2, 5, 4)=
+              [
+                 [[ 40.  48.  56.  64.]
+                  [ 84. 100. 116. 132.]
+                  [130. 156. 182. 208.]
+                  [175. 210. 245. 280.]
+                  [219. 262. 305. 348.]]
+
+                 [[265. 318. 371. 424.]
+                  [310. 372. 434. 496.]
+                  [354. 424. 494. 564.]
+                  [400. 480. 560. 640.]
+                  [445. 534. 623. 712.]]
+               ]
+    b) mask(predefined in init function) = shape(2, 5) =
+            mask =
+               [
+                [ True  True False  True False]
+                [False  True  True False  True]
+               ]
+
+------------------------------------------------------------------------------
+For the computation we need to define recursion K.rnn:
+    target_val_last, target_val_seq, _ = K.rnn(step_function(), input_energy, initial_states, constants)
+For K.rnn we need to define step_function() with input parameters:
+    def step(self, input_energy_t, states)
+
+-------------------------------------------------------------------------------------------
+3.1 Compute K.rnn:
+   input_energy = shape(2, 5, 4)=
            [
               [[ 40.  48.  56.  64.]
                [ 84. 100. 116. 132.]
@@ -313,11 +341,13 @@ Compute Forward Recursion for Viterbi:
                [400. 480. 560. 640.]
                [445. 534. 623. 712.]]
             ]
-    b) Compute initial_states<list> = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]
-    initial_states<list> = [prev_target_val, take [0] element from secon dimension of prev_target_val] =
-                    [[prev_target_val, [[0.],[0.]] ]
 
-         b1) Compute prev_target_val = zeros_like(input_energy[:, 0, :]) -> take [0] element from second dimension
+
+3.1.1) Compute initial_states<list> = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]
+             initial_states<list> = [prev_target_val, take [0] element from second dimension of prev_target_val] =
+             [<prev_target_val>, <[[0.],[0.]]>]
+
+a) Compute prev_target_val = zeros_like(input_energy[:, 0, :]) -> take [0] element from second dimension
              shape from (2, 5, 4) to (2, 4)
              prev_target_val =
                      [
@@ -329,9 +359,17 @@ Compute Forward Recursion for Viterbi:
                          [0. 0. 0. 0.],
                          [0. 0. 0. 0.]
                        ]
+3.1.1) initial_states<list> = <shape(2, 5), sape(2,1)>
+          [
+           <[[0!., 0., 0., 0.],
+            [0!., 0., 0., 0.]]>,
 
-  c) Compute constants = <list> = [chain_energy, mask_for_const]
-       c1) Get chain_energy (was predefined in init function); shape(4, 4)=(n_tags,n_tags)
+           <[[0!.],[0!.]]>
+          ]
+
+3.1.2) Compute constants = <list> = [chain_energy, mask_for_const]
+
+a) Chain_energy (was predefined in init function); shape(4, 4)=(n_tags,n_tags)
          chain_energy =
                        [
                          [ 1.  2.  3.  4.]
@@ -340,7 +378,7 @@ Compute Forward Recursion for Viterbi:
                          [13. 14. 15. 16.]
                        ]
 
-            c1.1) expand_dims(chain_energy, 0)= from shape(4, 4) to (1, 4, 4)
+b) Expand_dims(chain_energy, 0)= from shape(4, 4) to (1, 4, 4)
                 chain_energy = [
                                   [[ 1.  2.  3.  4.]
                                     [ 5.  6.  7.  8.]
@@ -348,38 +386,43 @@ Compute Forward Recursion for Viterbi:
                                     [13. 14. 15. 16.]]
                                ]
 
-      c2) Compute mask_for_const =  K.cast(K.concatenate([mask, K.zeros_like(mask[:, :1])], axis=1), floatx())
+b) Compute mask_for_const =  K.cast(K.concatenate([mask, K.zeros_like(mask[:, :1])], axis=1), floatx())
 
 
-            c2.1) mask.shape =  (2, 5)
+ mask.shape =  (2, 5)
                 mask =
                    [
                     [ True  True False  True False]
                     [False  True  True False  True]
                    ]
 
-            c2.2) K.zeros_like(mask[:, :1])
+         K.zeros_like(mask[:, :1])
+                 mask[:, :1] = get [0] element from second dim = shape(2, 1) =
+                              [[True], [False]]
 
-                   mask[:, :1] = get [0] element from second dim = shape(2, 1) = [[True], [False]]
-                   K.zeros_like(mask[:, :1]) for bool type will set all values to [False] -> shape(2,1) = [[False],[False]]
+         K.zeros_like(mask[:, :1]) for bool type will set all values to [False] -> shape(2,1) =
+                      [[False],[False]]
 
-            c2.3) K.concatenate([mask, K.zeros_like(mask[:, :1])], axis=1 ) = K.concatenate([shape(2, 5), shape(2, 1)], axis=1) = shape(2, 6)
+         K.concatenate([mask, K.zeros_like(mask[:, :1])], axis=1 ) = K.concatenate([shape(2, 5), shape(2, 1)], axis=1) = shape(2, 6)
                   K.concatenate =
                   [
                    [ True  True False  True False False]
                    [False  True  True False  True False]
                   ]
-            c2.4) K.cast(K.concatenate(...), floatx()) convert bool to float = shape(2, 6)=
+
+        K.cast(K.concatenate(...), floatx()) convert bool to float = shape(2, 6)=
                   [
                     [1. 1. 0. 1. 0. 0.]
                     [0. 1. 1. 0. 1. 0.]
                   ]
-      c2) mask_for_const = shape(2, 6) =
+
+b) mask_for_const = shape(2, 6) =
                [
                  [1. 1. 0. 1. 0. 0.]
                  [0. 1. 1. 0. 1. 0.]
                ]
-   c) constants<list> = [chain_energy, mask_for_const] = [shape(1, 4, 4), shape(2, 6)] =
+
+3.1.2) constants<list> = [chain_energy, mask_for_const] = [shape(1, 4, 4), shape(2, 6)] =
                     [  <[[[ 1.,  2.,  3.,  4.],
                         [ 5.,  6.,  7.,  8.],
                         [ 9., 10., 11., 12.],
@@ -387,10 +430,10 @@ Compute Forward Recursion for Viterbi:
 
                         <[[1., 1., 0., 1., 0., 0.],
                          [0., 1., 1., 0., 1., 0.]]> ]
-   d) Define recursion K.rnn()
-      target_val_last, target_val_seq, _ = K.rnn(step_function(), input_energy, initial_states, constants)
+------------------------------------------------------------------------------------------
+Computed parameters for K.rnn(step_function(), input_energy, initial_states, constants):
 
-      input_energy = shape(2, 5, 4)=
+a) input_energy = shape(2, 5, 4)=
                [
                   [[ 40.  48.  56.  64.]
                    [ 84. 100. 116. 132.]
@@ -405,7 +448,7 @@ Compute Forward Recursion for Viterbi:
                    [445. 534. 623. 712.]]
                 ]
 
-      initial_states<list> = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]  = [shape(2, 4), shape[2, 1]]
+b) initial_states<list> = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]  = [shape(2, 4), shape[2, 1]]
                             /  where prev_target_val = K.zeros_like(input_energy[:, 0, :]) /
                              [K.zeros_like(input_energy[:, 0, :]), K.zeros_like(prev_target_val[:, :1]] =
                              [K.zeros_like(input_energy[:, 0, :]), K.zeros_like(prev_target_val[:, 0]] =
@@ -416,7 +459,8 @@ Compute Forward Recursion for Viterbi:
                              ]>,
 
                             <[[0.],[0.]]> ]
-      constants<list> = [chain_energy, mask_for_const] = [shape(1, 4, 4), shape(2, 6)] =
+
+c) constants<list> = [chain_energy, mask_for_const] = [shape(1, 4, 4), shape(2, 6)] =
                   / where mask_for_const = K.cast(K.concatenate([mask, K.zeros_like(mask[:, 0])], axis=1), floatx()) ->
                   mask_for_const = from shape(2, 5) to (2, 6) /
 
@@ -430,5 +474,144 @@ Compute Forward Recursion for Viterbi:
                          [0., 1., 1., 0., 1., 0.]]>
                      ]
 ------------------------------------------------------------------------------------
-  e) Compute step_function(input_energy, states)
-     
+3.2) Compute step_function(input_energy_t, states):
+  Input parameters:
+    a) input_energy_t = shape(2, 4) = take element input_energy(:, 0, :)
+                   [
+                     [ 40.  48.  56.  64.]
+                     [265. 318. 371. 424.]
+                   ]
+
+    b) states<list> = [<initial_states>, <constants>]
+       states<list> = [<shape(2, 4), shape[2, 1]>, <shape(1, 4, 4), shape(2, 6)>] =
+       states<list> = [<prev_target_val, K.zeros_like(prev_target_val[:, 0])>, <chain_energy, mask_for_const>]
+       states<list> =
+                  [
+                     <[[0!., 0., 0., 0.],
+                        [0!., 0., 0., 0.]]>,
+
+                      <[[0!.],[0!.]]>,
+
+                      <[[[ 1.,  2.,  3.,  4.],
+                          [ 5.,  6.,  7.,  8.],
+                          [ 9., 10., 11., 12.],
+                          [13., 14., 15., 16.]]]>,
+
+                      <[[1., 1., 0., 1., 0., 0.],
+                        [0., 1., 1., 0., 1., 0.]]>
+                    ]
+
+----------------------------------------------
+Iteration 1:
+prev_target_val, i, chain_energy = states[:3] -> take these elements from the states<list>
+
+a) prev_target_val = shape(2,4) =
+     [[0!!., 0., 0., 0.],
+       [0!., 0., 0., 0.]]
+
+b) i = shape(2,1) = K.zeros_like(prev_target_val[:, 0])
+     [[0!!.],[0!.]]
+
+c) chain_energy = shape(1, 4, 4) =
+      [[[ 1.,  2.,  3.,  4.],
+        [ 5.,  6.,  7.,  8.],
+        [ 9., 10., 11., 12.],
+        [13., 14., 15., 16.]]]
+
+ d) t = K.cast(i[0, 0])
+    t = [0!!]
+
+ e) m = K.slice(states[3], [0, t], [-1, 2])
+
+ e1) states[3] =  mask_for_const = shape(2, 6)
+
+      <[[1.!, 1.!, 0., 1., 0., 0.],
+        [0.!, 1.!, 1., 0., 1., 0.]]>
+
+
+ e) m = K.slice(...) = take elem[0,0], elem[0,1], [1,0], [1,1] = shape(2,2) =
+
+      [
+       [1.!, 1.!],
+       [0.!, 1.!]
+      ]
+
+ f) input_energy_t = input_energy_t * K.expand_dims(m[:, 0]) -> (E(y|x)=y1 * x1))
+
+f1) m[:, 0] = [1.!, 0.!]  shape(2)->  expand -> shape(2, 1) -> [[1.][0.]]
+
+f) input_energy_t = shape(2, 4) * shape(2, 1) = shape(2, 4)
+    [
+      [ 40.  48.  56.  64.]
+      [265. 318. 371. 424.]
+    ]
+    *
+    [[1.][0.]]
+    =
+    [[40. 48. 56. 64.]
+     [ 0.  0.  0.  0.]]
+
+g) chain_energy =  chain_energy * K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1]))
+
+g1) chain_energy = shape(1, 4, 4) =
+      [[[ 1.,  2.,  3.,  4.],
+        [ 5.,  6.,  7.,  8.],
+        [ 9., 10., 11., 12.],
+        [13., 14., 15., 16.]]]
+
+ g2!!!!!!!) m[:, 0] * m[:, 1] = (LINEAR CHAIN REALIZATION) = shape(2)*shape(2)= [1., 0.] * [1., 1.] = [1., 0.]
+
+ g3)  K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1])) = from shape(2) to shape(2,1,1) =  [[[1.]],[[0.]]]
+
+ g) chain_energy = shape(1, 4, 4) * shape(2, 1, 1) = shape(2, 4, 4) =
+    [[[ 1.  2.  3.  4.]
+      [ 5.  6.  7.  8.]
+      [ 9. 10. 11. 12.]
+      [13. 14. 15. 16.]]
+
+     [[ 0.  0.  0.  0.]
+      [ 0.  0.  0.  0.]
+      [ 0.  0.  0.  0.]
+      [ 0.  0.  0.  0.]]]
+
+ h) energy = chain_energy +  K.expand_dims(input_energy_t + prev_target_val, 2)
+ h1) input_energy_t + prev_target_val = shape(2, 4) + shape(2, 4) = shape(2, 4)
+
+    [[40. 48. 56. 64.]
+      [ 0.  0.  0.  0.]]
+    +
+    [[0., 0., 0., 0.],
+      [0., 0., 0., 0.]]
+    =
+    [[40. 48. 56. 64.]
+     [ 0.  0.  0.  0.]]
+
+  h2) K.expand_dims(input_energy_t + prev_target_val, 2)= from shape(2, 4) to shape (2, 4, 1) =   /axis = 2 = axis = -1/
+      [[[40.]
+        [48.]
+        [56.]
+        [64.]]
+
+       [[ 0.]
+        [ 0.]
+        [ 0.]
+        [ 0.]]]
+
+ h) energy = shape(1, 4, 4) + shape(2, 4, 1) = shape(2, 4, 4)
+    [[[41. 42. 43. 44.]
+      [53. 54. 55. 56.]
+      [65. 66. 67. 68.]
+      [77. 78. 79. 80.]]
+
+     [[ 0.  0.  0.  0.]
+      [ 0.  0.  0.  0.]
+      [ 0.  0.  0.  0.]
+      [ 0.  0.  0.  0.]]]
+
+  k) Find MIN_ENERGY =  min_energy = K.min(energy, 1) - to find min values in dim = 1
+      shape=(2, 4) =
+
+      [[41. 42. 43. 44.]
+      [ 0.  0.  0.  0.]]
+
+  l) ARGMIN_TABLE = K.cast(K.argmin(energy, 1), K.floatx())
