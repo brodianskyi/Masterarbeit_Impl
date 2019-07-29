@@ -375,6 +375,7 @@ class CRF(Layer):
         if mask is not None:
             self.format_print("mask", mask)
             self.format_print("K.zeros_like(mask[:, :1])", K.zeros_like(mask[:, :1]))
+            self.format_print("K.concatenate(...)", K.concatenate([mask, K.zeros_like(mask[:, :1])], axis=1))
             mask2 = K.cast(K.concatenate([mask, K.zeros_like(mask[:, :1])], axis=1),
                            K.floatx())
             self.format_print("mask2", mask2)

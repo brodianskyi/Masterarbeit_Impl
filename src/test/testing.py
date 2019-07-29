@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import numpy as np
 import tensorflow as tf
+from keras import backend as K
 
 tf.enable_eager_execution()
 my_tensor = tf.constant(
@@ -85,6 +86,8 @@ chain_kernel = tf.constant(np.arange(1, 17, dtype=np.float32), shape=[4, 4])
 # last, values, end = K.rnn(_forward_step, inputs, initial_states)
 # print(chain_kernel.eval())
 
-print(chain_kernel)
+mask = tf.constant([[True, True, False, True, False], [False, True, True, False, True]], dtype="bool")
+print(mask[:, :1])
+print(K.zeros_like(mask[:, :1]))
 
 sess.close()
