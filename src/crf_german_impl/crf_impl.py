@@ -460,11 +460,11 @@ class CRF(Layer):
             # axes=1 to find minimum values in a tensor
             min_energy = K.min(energy, 1)
             self.format_print("min_energy", min_energy)
-            # self.format_print("min_energy", min_energy)
-            # self.format_print("K.argmin(energy, 1)", K.argmin(energy, 1))
+            self.format_print("K.argmin(energy, 1)", K.argmin(energy, 1))
             argmin_table = K.cast(K.argmin(energy, 1), K.floatx())
-            # self.format_print("argmin_table", argmin_table)
-            # self.format_print("[min_energy, i + 1]", [min_energy, i + 1])
+            self.format_print("argmin_table", argmin_table)
+            self.format_print("i+1", i+1)
+            self.format_print("(argmin_table, [min_energy, i + 1])", [min_energy, i + 1])
             return argmin_table, [min_energy, i + 1]
 
     @staticmethod

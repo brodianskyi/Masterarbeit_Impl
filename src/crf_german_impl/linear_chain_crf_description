@@ -473,18 +473,22 @@ c) constants<list> = [chain_energy, mask_for_const] = [shape(1, 4, 4), shape(2, 
                         <[[1., 1., 0., 1., 0., 0.],
                          [0., 1., 1., 0., 1., 0.]]>
                      ]
+-----------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------
 3.2) Compute step_function(input_energy_t, states):
+
+Iteration 0:
   Input parameters:
-    a) input_energy_t = shape(2, 4) = take element input_energy(:, 0, :)
+    1) input_energy_t = shape(2, 4) = take element input_energy(:, 0, :)
+       Iteration 0 -> (:, 0, :) =
+
                    [
                      [ 40.  48.  56.  64.]
                      [265. 318. 371. 424.]
                    ]
 
-    b) states<list> = [<initial_states>, <constants>]
-       states<list> = [<shape(2, 4), shape[2, 1]>, <shape(1, 4, 4), shape(2, 6)>] =
-       states<list> = [<prev_target_val, K.zeros_like(prev_target_val[:, 0])>, <chain_energy, mask_for_const>]
+    2) states<list> = [<prev_target_val, K.zeros_like(prev_target_val[:, 0]), <chain_energy, mask_for_const>]
+       states<list> = [<prev_target_val, i = 0(Iteration_0), <chain_energy, mask_for_const>]
        states<list> =
                   [
                      <[[0!., 0., 0., 0.],
@@ -501,16 +505,15 @@ c) constants<list> = [chain_energy, mask_for_const] = [shape(1, 4, 4), shape(2, 
                         [0., 1., 1., 0., 1., 0.]]>
                     ]
 
-----------------------------------------------
-Iteration 1:
-prev_target_val, i, chain_energy = states[:3] -> take these elements from the states<list>
+-------------------------------------------------------------------------------
+prev_target_val, i, chain_energy = states[:3] -> take first three elements from the states<list>
 
-a) prev_target_val = shape(2,4) =
+a) prev_target_val = shape(2,4) -> there is not previos_target for the Iteration_0 -> 0 =
      [[0!!., 0., 0., 0.],
        [0!., 0., 0., 0.]]
 
 b) i = shape(2,1) = K.zeros_like(prev_target_val[:, 0])
-     [[0!!.],[0!.]]
+     [[0!!.],[0!.]] -> Iteration_0 = i = 0
 
 c) chain_energy = shape(1, 4, 4) =
       [[[ 1.,  2.,  3.,  4.],
@@ -519,9 +522,12 @@ c) chain_energy = shape(1, 4, 4) =
         [13., 14., 15., 16.]]]
 
  d) t = K.cast(i[0, 0])
-    t = [0!!]
+    t = 0 -> Iteration_0 -> t = 0
 
- e) m = K.slice(states[3], [0, t], [-1, 2])
+---------------  t = 0 -------------------------------
+
+ e) t=0 -> Iteration_0
+   m(tags) = K.slice(states[3], [0, t], [-1, 2])
 
  e1) states[3] =  mask_for_const = shape(2, 6)
 
@@ -529,16 +535,19 @@ c) chain_energy = shape(1, 4, 4) =
         [0.!, 1.!, 1., 0., 1., 0.]]>
 
 
- e) m = K.slice(...) = take elem[0,0], elem[0,1], [1,0], [1,1] = shape(2,2) =
+ e) m = K.slice(states[3], [0, 0], [-1, 2]) -> (input, begin, size) ->
+        in tensor states[3],
+        from position [0, t=0],
+        take two elements = [-1, 2] = [:, 2]
 
-      [
-       [1.!, 1.!],
-       [0.!, 1.!]
-      ]
+    m =  [
+           [1.!, 1.!],
+           [0.!, 1.!]
+          ]
+---------------------------------------------------------------------------
+f) input_energy_t = input_energy_t * K.expand_dims(m[:, 0])
 
- f) input_energy_t = input_energy_t * K.expand_dims(m[:, 0]) -> (E(y|x)=y1 * x1))
-
-f1) m[:, 0] = [1.!, 0.!]  shape(2)->  expand -> shape(2, 1) -> [[1.][0.]]
+f1) m[:, 0] = [1.!, 0.!] -> shape(2)->  expand -> shape(2, 1) -> [[1.][0.]]
 
 f) input_energy_t = shape(2, 4) * shape(2, 1) = shape(2, 4)
     [
@@ -550,6 +559,7 @@ f) input_energy_t = shape(2, 4) * shape(2, 1) = shape(2, 4)
     =
     [[40. 48. 56. 64.]
      [ 0.  0.  0.  0.]]
+--------------------------------------------------------------------------------
 
 g) chain_energy =  chain_energy * K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1]))
 
@@ -559,9 +569,9 @@ g1) chain_energy = shape(1, 4, 4) =
         [ 9., 10., 11., 12.],
         [13., 14., 15., 16.]]]
 
- g2!!!!!!!) m[:, 0] * m[:, 1] = (LINEAR CHAIN REALIZATION) = shape(2)*shape(2)= [1., 0.] * [1., 1.] = [1., 0.]
+ g2!!!) m[:, 0] * m[:, 1] = (LINEAR CHAIN REALIZATION) = shape(2)*shape(2)= [1., 0.] * [1., 1.] = [1., 0.]
 
- g3)  K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1])) = from shape(2) to shape(2,1,1) =  [[[1.]],[[0.]]]
+ g3) K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1])) = from shape(2) to shape(2,1,1) =  [[[1.]],[[0.]]]
 
  g) chain_energy = shape(1, 4, 4) * shape(2, 1, 1) = shape(2, 4, 4) =
     [[[ 1.  2.  3.  4.]
@@ -573,9 +583,10 @@ g1) chain_energy = shape(1, 4, 4) =
       [ 0.  0.  0.  0.]
       [ 0.  0.  0.  0.]
       [ 0.  0.  0.  0.]]]
+------------------------------------------------------------------------------
 
  h) energy = chain_energy +  K.expand_dims(input_energy_t + prev_target_val, 2)
- h1) input_energy_t + prev_target_val = shape(2, 4) + shape(2, 4) = shape(2, 4)
+ h1) input_energy_t + prev_target_val = shape(2, 4) + shape(2, 4) = shape(2, 4)=
 
     [[40. 48. 56. 64.]
       [ 0.  0.  0.  0.]]
@@ -598,20 +609,133 @@ g1) chain_energy = shape(1, 4, 4) =
         [ 0.]]]
 
  h) energy = shape(1, 4, 4) + shape(2, 4, 1) = shape(2, 4, 4)
-    [[[41. 42. 43. 44.]
-      [53. 54. 55. 56.]
-      [65. 66. 67. 68.]
-      [77. 78. 79. 80.]]
+    [[[41!. 42!. 43. 44.]
+      [53!. 54!. 55. 56.]
+      [65!. 66!. 67. 68.]
+      [77!. 78!. 79. 80.]] - for first dim - look from top to bottom ant take min value
 
      [[ 0.  0.  0.  0.]
       [ 0.  0.  0.  0.]
       [ 0.  0.  0.  0.]
       [ 0.  0.  0.  0.]]]
+------------------------------------------------------------------------------------
 
   k) Find MIN_ENERGY =  min_energy = K.min(energy, 1) - to find min values in dim = 1
       shape=(2, 4) =
 
-      [[41. 42. 43. 44.]
-      [ 0.  0.  0.  0.]]
+      min_energy = [[41. 42. 43. 44.]
+                    [ 0.  0.  0.  0.]]
+---------------------------------------------------------------------------------------
+  l) ARGMIN_TABLE = K.cast(K.argmin(energy, 1), K.floatx())= shape(2,4)=
+     K.argmin - e.g - [41. 42. 43. 44.] - this elements are min first part of the tensor and were found in index = [0]
+                      [ 0.  0.  0.  0.] - this elements are min second part of the tensor and were found in index = [0]
 
-  l) ARGMIN_TABLE = K.cast(K.argmin(energy, 1), K.floatx())
+    argmin_table = [[0 0 0 0]              [[0. 0. 0. 0.]
+                    [0 0 0 0]] -> cast ->   [0. 0. 0. 0.]]
+
+Return after Iteration 0:
+    <tuple> = (argmin_table, [min_energy, i + 1])
+    <tuple> = (
+               <[[0. 0. 0. 0.]
+                [0. 0. 0. 0.]]>,
+
+               <[
+                 [[41. 42. 43. 44.]
+                 [ 0.  0.  0.  0.]],
+
+                 [[0!!.],[0!.]] + 1 = [[1.][1.]]
+               ]>
+
+              )
+-------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------
+Iteration 1:
+  Input parameters:
+  1) input_energy_t = shape(2, 4) = take next element of input_energy(:, 1, :)
+     Iteration 1 -> (:, 1, :) =
+    [
+     [ 84. 100. 116. 132.]
+     [310. 372. 434. 496.]
+    ]
+
+ 2) states<list> = [<prev_target_val, i , <chain_energy, mask_for_const>]
+    a) prev_target_val = min_energy(from the previous iteration)
+    b) i= i +1 = [[1.], [1.]] -> (from previous iteration)
+    c) chain_energy - still the same as in the previous iteration
+    mask_for_const - still the same as in the previous iteration
+
+    states<list> = [
+                    <[[41., 42., 43., 44.],
+                     [ 0.,  0.,  0.,  0.]]>,
+
+                     <[[1.], [1.]]>,
+
+                     <[[[ 1.,  2.,  3.,  4.],
+                        [ 5.,  6.,  7.,  8.],
+                        [ 9., 10., 11., 12.],
+                        [13., 14., 15., 16.]]]>,
+
+                     <[[1., 1.!, 0.!, 1., 0., 0.],
+                        [0., 1.!, 1.!, 0., 1., 0.]]>
+                   ]
+
+ d) t = K.cast(i[0, 0]) = 1
+------------------------------- t = 1 ---------------------------------------------------------------
+ e)t = 1 -> increase t=+1 value each iteration -> in order to iterate through mask_for_const (mask_for_const = states[3])
+   m(tags) = K.slice(states[3], [0, t], [-1, 2]) -> (input, begin, size) ->
+        begin = from position [0, t=1])
+        take next two element = [-1, 2] = [:, 2]
+
+e1) states[3] =  mask_for_const = shape(2, 6)
+
+     <[[1., 1.!, 0.!, 1., 0., 0.],
+       [0., 1.!, 1.!, 0., 1., 0.]]>
+
+   m(tag(t), tag(t+1)) =  [
+                           [[1.!, 0.]
+                           [1.!, 1.]]
+                          ]
+-----------------------input_energy = word(t) * tag(t)--------------------------
+f) input_energy_t = input_energy_t * K.expand_dims(m[:, 0])
+f1) m[:, 0] = [1.!, 1.!] -> take next two tags [1. 1.] (in Iteration_0 it was [1, 0]
+f) input_energy_t = input_energy on this iteration * tags
+       [
+          [ 84. 100. 116. 132.]
+          [310. 372. 434. 496.]
+       ]
+
+       *
+       [[1.], [1.]]
+       =
+       [[ 84. 100. 116. 132.]
+        [310. 372. 434. 496.]] ->
+
+f)    word[84. 100. 116. 132.] * according tag[1.]
+  and
+      word[310. 372. 434. 496.] * according tag[1.]
+--------------------------------------------------------------------------------
+g) chain_energy =  chain_energy(equal like in the previous iteration) *
+                   K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1])) ->
+   chain_energy * (tag(t) * tag(t+1))
+
+ g1) m[:, 0] = tag(t) = [1., 1.]
+     m[:, 1] = tag(t+1) = [0., 1.]
+-------------------------------------------------------------------------------
+h) energy = chain_energy +  K.expand_dims(input_energy_t + prev_target_val, 2)->
+             where prev_target_val = min_energy(from the previous iteration)
+-------------------------------------------------------------------------------
+k) Find MIN_ENERGY = K.min(energy, 1) - find min values in dim=1=
+    shape(2, 4) =
+
+    min_energy = [[125. 125. 125. 125.]
+                 [311. 312. 313. 314.]]
+-------------------------------------------------------------------------------
+  l) Find ARGMIN_TABLE - find indices of min elements=
+     [[0 0 0 0]
+     [0 0 0 0]] -> min values are in the [0] element of dim1
+-------------------------------------------------------------------------------
+Return after Iteration 1:
+      <tuple> = (argmin_table, [min_energy, i + 1]) -> Increase values of i
+      for the next Iteration
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------           

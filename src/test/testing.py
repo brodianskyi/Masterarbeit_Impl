@@ -9,9 +9,9 @@ my_tensor = tf.constant(
     [
         [
             [1, 2, 3, 4],
-            [5, 6, 7, 8],
+            [0, 1, 7, 8],
             [9, 10, 11, 12],
-            [12, 13, 14, 15]
+            [12, -1, 14, 15]
         ]
         ,
         [
@@ -29,7 +29,8 @@ kernel = K.constant(np.arange(1, 13, dtype=np.float32), shape=[2, 6])
 # [[ 5.  6.  7.  8.]]
 # print(my_tensor[0, 1:2, :])
 # slice(input, begin, size)
-print(tf.slice(kernel, [0, 0], [-1, 2]))
+print(K.min(my_tensor, 1))
+print(K.argmin(my_tensor, 1))
 # print("expand", K.expand_dims(my_tensor))
 # print("llll", my_tensor[0, 1, 0])
 # Shape = (2,3,4)
