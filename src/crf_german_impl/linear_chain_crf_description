@@ -861,7 +861,7 @@ Return after Iteration 4:
         <tuple> =
                  (
                              <[[0. 0. 0. 0.]
-                               [3. 3. 3. 3.]]>,
+                               [2. 2. 2. 2.]]>,
 
                           <[
                             [[ 300.  300.  300.  300.]
@@ -878,7 +878,7 @@ Return after Iteration 4:
  target_val_last = argmin_table in (last)Iteration 4 =
 
                    [[0. 0. 0. 0.]
-                     [3. 3. 3. 3.]]
+                     [2. 2. 2. 2.]]
 
 target_val_seq = all argmin_tables from all Iterations =
 (indices where is the min value in input_energy tensor)
@@ -893,20 +893,42 @@ target_val_seq = all argmin_tables from all Iterations =
                     [1. 1. 1. 1.]
                     [3. 3. 3. 3.]
                     [0. 0. 0. 0.]
-                    [3. 3. 3. 3.]]]
+                    [2. 2. 2. 2.]]]
 -------------------------------------------------------------------------
 VITERBI FORWARD RECURSION:
 3) argmin_tables = self.recursion(input_energy, mask) = target_val_seq =
-     [[[0. 0. 0. 0.]
-       [3. 3. 3. 3.]
-       [0. 0. 0. 0.]
-       [1. 1. 1. 1.]
-       [0. 0. 0. 0.]]
+     [[[0. 0. 0. 0.] -> best at iteration 0
+       [3. 3. 3. 3.] -> best at iteration 1
+       [0. 0. 0. 0.] -> best at iteration 2
+       [1. 1. 1. 1.] -> best at iteration 3
+       [0. 0. 0. 0.]] -> best at iteration 4
 
-      [[0. 0. 0. 0.]
-       [1. 1. 1. 1.]
-       [3. 3. 3. 3.]
-       [0. 0. 0. 0.]
-       [3. 3. 3. 3.]]]
+      [[0. 0. 0. 0.] -> best at iteration 0
+       [1. 1. 1. 1.] -> best at iteration 1
+       [3. 3. 3. 3.] -> best at iteration 2
+       [0. 0. 0. 0.] -> best at iteration 3
+       [2. 2. 2. 2.!]]] -> best at iteration 4
 -------------------------------------------------------------------------
-  
+a) cast(argmin_tables, "int32") -> after iterations in self.recursion(...)
+                                the "best" indices were found in the last iteration-4,
+                                and now they are at [:, 4, :] = [[0 0 0 0] , [2 2 2 2]]
+
+b) reverse(argmin_tables, 1) -> do reverse to place "best" indices from [4] to [0] position
+
+   reverse = [[ [0! 0 0 0]
+                [1 1 1 1]
+                [0 0 0 0]
+                [3 3 3 3]
+                [0 0 0 0]]
+
+               [[2! 2 2 2]
+                [0 0 0 0]
+                [3 3 3 3]
+                [1 1 1 1]
+                [0 0 0 0] ]]
+
+c) Take first values from "best" indicies for initialization before loop through argmin_tables
+   initial_best_idx = argmin_tables[:, 0, 0]
+   initial_best_idx = [[0!][2!]]
+
+d)

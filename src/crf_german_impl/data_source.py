@@ -1,14 +1,14 @@
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 from keras import backend as K
 
+tf.enable_eager_execution()
 n_tags = 4
 batch_size = 2
 max_seq_len = 5
 embedding_dim = 3
 # output from Embedding layer, input for CRF-Layer
 input_shape = (batch_size, max_seq_len, embedding_dim)
-
 
 # shape = (batch_size, max_seq_len, embedding_dim) -> (2, 5, 3)
 '''
@@ -90,5 +90,24 @@ left_boundary = K.cast(tf.constant(np.random.randint(10, 300, size=(4,))), K.flo
 # shape = (n_tags,) -> (4,)
 right_boundary = K.cast(tf.constant(np.random.randint(10, 300, size=(4,))), K.floatx())
 
-
-
+# argmin_table shape = (2, 5, 4)
+argmin_table = tf.constant(
+    [
+        [
+            [0, 0, 0, 0],
+            [3, 3, 3, 3],
+            [0, 0, 0, 0],
+            [1, 1, 1, 1],
+            [0, 0, 0, 0]
+        ]
+        ,
+        [
+            [0, 0, 0, 0],
+            [1, 1, 1, 1],
+            [3, 3, 3, 3],
+            [0, 0, 0, 0],
+            [2, 2, 2, 2]
+        ]
+    ]
+    , dtype="float32"
+)
