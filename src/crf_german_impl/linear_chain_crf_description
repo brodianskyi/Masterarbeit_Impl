@@ -479,7 +479,7 @@ c) constants<list> = [chain_energy, mask_for_const] = [shape(1, 4, 4), shape(2, 
 
 Iteration 0:
   Input parameters:
-    1) input_energy_t = shape(2, 4) = take element input_energy(:, 0, :)
+    1) input_energy_t = shape(2, 4) = take elements input_energy(:, 0, :)
        Iteration 0 -> (:, 0, :) =
 
                    [
@@ -909,26 +909,75 @@ VITERBI FORWARD RECURSION:
        [0. 0. 0. 0.] -> best at iteration 3
        [2. 2. 2. 2.!]]] -> best at iteration 4
 -------------------------------------------------------------------------
-a) cast(argmin_tables, "int32") -> after iterations in self.recursion(...)
+a) argmin = cast(argmin_tables, "int32") -> after iterations in self.recursion(...)
                                 the "best" indices were found in the last iteration-4,
                                 and now they are at [:, 4, :] = [[0 0 0 0] , [2 2 2 2]]
 
-b) reverse(argmin_tables, 1) -> do reverse to place "best" indices from [4] to [0] position
+b) argmin_tables = reverse(argmin_tables, 1) -> do reverse to place "best" indices from [4] to [0] position
 
-   reverse = [[ [0! 0 0 0]
-                [1 1 1 1]
-                [0 0 0 0]
-                [3 3 3 3]
-                [0 0 0 0]]
+   argmin_tables = [[ [0! 0 0 0]
+                      [1 1 1 1]
+                      [0 0 0 0]
+                      [3 3 3 3]
+                      [0 0 0 0]]
 
-               [[2! 2 2 2]
-                [0 0 0 0]
-                [3 3 3 3]
-                [1 1 1 1]
-                [0 0 0 0] ]]
+                     [[2! 2 2 2]
+                      [0 0 0 0]
+                      [3 3 3 3]
+                      [1 1 1 1]
+                      [0 0 0 0] ]]
 
 c) Take first values from "best" indicies for initialization before loop through argmin_tables
    initial_best_idx = argmin_tables[:, 0, 0]
    initial_best_idx = [[0!][2!]]
 
-d)
+-------------------------------------------------------------------------------
+  4) Find best_path = K.rnn(find_path, argmin_tables, initial_best_idx,
+                            input_length=K.int_shape(X)[1])
+
+    find_path = step_function()
+    input_length = /where X=(batch_size, max_seq_len, embedding_dim)/ = max_seq_len = 5
+-------------------------------------------------------------------------------
+Compute step_function -> find_path(argmin_table!, best_idx):
+
+  Iteration 0:
+    Input parameters:
+      1) argmin_table = shape(2, 4) = take elements argmin_tables(:, 0, :)
+
+         argmin_table = [[0 0 0 0]
+                         [2 2 2 2]]
+
+      2) best_idx = Iteration 0 = initial_best_idx = shape(2, 1)
+
+         best_idx = [[0][2]]
+
+-----------------------------------------------------------------------------
+find next best index ->  next_best_idx = gather_each_row(argmin_table, best_idx[0][:, 0]) ->
+                         call function gather_each_row(params, indices)
+    1) params = argmin_table
+    2) indices =  best_idx[0][:, 0] = [0 2]
+--------------------------------------------
+a)  n = K.shape(indices)[0] = 2 (two elements in tensor)
+
+b) indices = K.transpose(K.stack([tf.range(n), indices]))
+
+   b1) tf.range(n) = create tensor with elem in range(0,2) = [0, 1] = shape(2,)
+   b2) K.stack -> merge two tensors(tf.range(n) and indices) =
+       K.stack = [[0 1]
+                  [0 2]]
+
+b) indices = K.transpose -> транспонируем =
+        [[0 1]    ->  [[0 0]
+        [0 2]]         [1 2]]
+
+gather_each_row returns ->  tf.gather_nd(params, indices)) = [0 2]
+------------back to find_path()-------------------------------
+c)  next_best_idx =  [0 2]
+-------------------------------------------------------------
+
+  Output Iteration 0 = next_best_idx, [next_best_idx]
+  = <[0, 2]>, <[0, 2]>
+--------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+  Iteration 1:
+    Input parameters:

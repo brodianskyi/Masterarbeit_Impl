@@ -291,29 +291,43 @@ class CRF(Layer):
         print("input_length=", K.int_shape(X)[1], "unroll=", self.unroll)
 
         def gather_each_row(params, indices):
+            self.format_print("params", params)
+            self.format_print("indices", indices)
             n = K.shape(indices)[0]
+            print("shape(indices)", n)
             if K.backend() == "theano":
                 from theano import tensor as T
                 return params[T.arange(n), indices]
             elif K.backend() == "tensorflow":
+                self.format_print("[tf.range(n", tf.range(n))
+                self.format_print("K.stack", K.stack([tf.range(n), indices]))
                 indices = K.transpose(K.stack([tf.range(n), indices]))
+                self.format_print("indices after transpose", indices)
+                self.format_print("tf.gather_nd", tf.gather_nd(params, indices))
                 return tf.gather_nd(params, indices)
             else:
                 raise NotImplementedError
 
         def find_path(argmin_table, best_idx):
+            self.format_print("argmin_table in find_path", argmin_table)
+            self.format_print("best_idx in find_path", best_idx)
             next_best_idx = gather_each_row(argmin_table, best_idx[0][:, 0])
+            self.format_print("next_best_idx", next_best_idx)
             next_best_idx = K.expand_dims(next_best_idx)
+            self.format_print("next_best_idx expand", next_best_idx)
             if K.backend() == "theano":
                 from theano import tensor as T
                 next_best_idx = T.unbroadcast(next_best_idx, 1)
-
+            print("return find_path()", next_best_idx, [next_best_idx])
             return next_best_idx, [next_best_idx]
 
         _, best_paths, _ = K.rnn(find_path, argmin_tables, initial_best_idx,
                                  input_length=K.int_shape(X)[1], unroll=self.unroll)
         best_paths = K.reverse(best_paths, 1)
+        self.format_print("best_path_reverse", best_paths)
         best_paths = K.squeeze(best_paths, 2)
+        self.fromat_print("best_path_squeeze", best_paths)
+        self.format_print("K.one_hot", K.one_hot(best_paths, self.units))
 
         return K.one_hot(best_paths, self.units)
 
