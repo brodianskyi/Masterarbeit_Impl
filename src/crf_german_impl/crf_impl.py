@@ -276,8 +276,25 @@ class CRF(Layer):
         self.format_print("argmin_tables = self.recursion", argmin_tables)
         argmin_tables = K.cast(argmin_tables, "int32")
         self.format_print("K.cast(argmin_tables, int32); argmin_tables", argmin_tables)
-        # -!!!sys.stdout = self.oldStdout
-        # -!!!self.output_file.close()
+
+        # backwards to find best path
+        argmin_tables = K.reverse(argmin_tables, 1)
+        # matrix instead of vector trquired by tf "K.rnn"
+        print("argmin_tables = \n", argmin_tables)
+        initial_best_idx = [K.expand_dims(argmin_tables[:, 0, 0])]
+        print("initial_best_idx \n", initial_best_idx)
+        if K.backend() == "theano":
+            from theano import tensor as T
+            initial_best_idx = [T.unbroadcast(initial_best_idx[0], 1)]
+
+        print("input_length=", K.int_shape(X)[1], "unroll=", self.unroll)
+
+        def find_path(argmin_table, best_idx):
+            print("find_path")
+
+        _, best_paths, _ = K.rnn(find_path, argmin_tables, initial_best_idx,
+                                 input_length=K.int_shape(X)[1], unroll=self.unroll)
+
         return input_energy
 
     def add_boundary_energy(self, energy, mask, start, end):
@@ -391,7 +408,7 @@ class CRF(Layer):
                                                    constants=constants,
                                                    input_length=input_length,
                                                    unroll=self.unroll)
-        self.format_print("target_val_last", target_val_last)
+        print("target_val_last", target_val_last)
         self.format_print("target_val_seq", target_val_seq)
 
         # return_sequence = True (by default)
@@ -408,7 +425,6 @@ class CRF(Layer):
 
     def step(self, input_energy_t, states, return_logZ=True):
         # if return_logZ = False -> compute the Viterbi best path
-        print("return_logZ in step()", return_logZ)
         self.format_print("input_energy_t", input_energy_t)
         self.format_print("states", states)
         self.format_print("states[:3]", states[:3])
@@ -462,7 +478,7 @@ class CRF(Layer):
             self.format_print("min_energy", min_energy)
             self.format_print("K.argmin(energy, 1)", K.argmin(energy, 1))
             argmin_table = K.cast(K.argmin(energy, 1), K.floatx())
-            self.format_print("argmin_table", argmin_table)
+            print("argmin_table", argmin_table)
             self.format_print("i+1", i+1)
             self.format_print("(argmin_table, [min_energy, i + 1])", [min_energy, i + 1])
             return argmin_table, [min_energy, i + 1]

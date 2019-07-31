@@ -6,22 +6,23 @@ from keras import backend as K
 
 tf.enable_eager_execution()
 my_tensor = tf.constant(
-    [
+[
         [
-            [1, 2, 3, 4],
-            [0, 1, 7, 8],
-            [9, 10, 11, 12],
-            [12, -1, 14, 15]
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+            [10, 11, 12],
+            [13, 14, 15]
         ]
         ,
         [
-            [16, 17, 18, 19],
-            [20, 21, 22, 23],
-            [24, 25, 26, 27],
-            [28, 29, 30, 31]
+            [16, 17, 18],
+            [19, 20, 21],
+            [22, 23, 24],
+            [25, 26, 27],
+            [28, 29, 30]
         ]
     ]
-
     , dtype="float32"
 )
 
@@ -29,8 +30,8 @@ kernel = K.constant(np.arange(1, 13, dtype=np.float32), shape=[2, 6])
 # [[ 5.  6.  7.  8.]]
 # print(my_tensor[0, 1:2, :])
 # slice(input, begin, size)
-print(K.min(my_tensor, 1))
-print(K.argmin(my_tensor, 1))
+# print(K.min(my_tensor, 1))
+# print(K.argmin(my_tensor, 1))
 # print("expand", K.expand_dims(my_tensor))
 # print("llll", my_tensor[0, 1, 0])
 # Shape = (2,3,4)
@@ -94,6 +95,9 @@ chain_kernel = tf.constant(np.arange(1, 17, dtype=np.float32), shape=[4, 4])
 
 # last, values, end = K.rnn(_forward_step, inputs, initial_states)
 # print(chain_kernel.eval())
+# print("LLLLLLLLL - -\n", K.cast(tf.constant(np.random.randint(2, 150, size=(3, 4))), K.floatx()))
+argmin_tables = K.reverse(my_tensor, 1)
+print(argmin_tables)
 
 
 
