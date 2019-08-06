@@ -382,6 +382,10 @@ class CRF(Layer):
             self.format_print("final_energy = input_energy * start_mask * start + end_mask * end", energy)
         return energy
 
+    def get_negative_log_likelihood(self, y_true, X, mask):
+        input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
+        return input_energy
+
     def recursion(self, input_energy, mask=None, go_backwards=False,
                   return_sequences=True, return_logZ=True, input_length=None):
         """
@@ -553,6 +557,7 @@ class CRF(Layer):
         return shift_right_t
 
     def format_print(self, variable_name, input_data):
+
         if hasattr(input_data, "shape"):
             return print("-" * 75, "\n" + variable_name + ".shape = ", input_data.shape, "\n" + variable_name +
                          " = " + "\n", input_data.numpy(), "\n", "-" * 75)

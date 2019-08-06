@@ -1067,7 +1067,7 @@ For each string of argmin_table only one best value of this string
     [0 1 3 0 2]]
 ------------------------------
 6) best_path = K.one_hot(best_path, self.units) /self.units = n_tags = 4/
-   best_path =
+   best_path = (batch_size,max_sequence_len,n_tags) = (2,5,4)
      [[[1. 0. 0. 0.]
         [0. 0. 0. 1.]
         [1. 0. 0. 0.]
@@ -1134,4 +1134,3 @@ best_path =
   [0]
   [2]]]
 -------------------------End of Example-----------------------------
-  

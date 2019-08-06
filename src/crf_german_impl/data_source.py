@@ -10,7 +10,7 @@ embedding_dim = 3
 # output from Embedding layer, input for CRF-Layer
 input_shape = (batch_size, max_seq_len, embedding_dim)
 
-# shape = (batch_size, max_seq_len, embedding_dim) -> (2, 5, 3)
+# shape_X = (batch_size, max_seq_len, embedding_dim) -> (2, 5, 3)
 '''
 X = tf.constant(
     [
@@ -134,3 +134,48 @@ argmin_table = tf.constant(
     ]
     , dtype="float32"
 )
+
+# data for crf_loss
+# shape of y_true = y_pred = (batch_size, max_seq_len, n_tags)=(2,5,4)
+y_true = tf.constant(
+    [
+        [
+            [1, 0, 0, 0],
+            [0, 0, 0, 1],
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [1, 0, 0, 0]
+        ]
+        ,
+        [
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 1],
+            [1, 0, 0, 0],
+            [0, 0, 1, 0]
+        ]
+    ]
+    , dtype="float32"
+)
+
+y_pred = tf.constant(
+    [
+        [
+            [0, 1, 0, 0],
+            [0, 0, 0, 1],
+            [0, 0, 1, 0],
+            [1, 0, 0, 0],
+            [1, 0, 1, 0]
+        ]
+        ,
+        [
+            [0, 0, 1, 0],
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [1, 0, 0, 0],
+            [0, 0, 0, 1]
+        ]
+    ]
+    , dtype="float32"
+)
+

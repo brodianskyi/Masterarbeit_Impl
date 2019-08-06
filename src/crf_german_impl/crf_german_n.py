@@ -26,7 +26,7 @@ data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span",
                    delimiter="\t",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
 
-# data = data.head(300)
+data = data.head(300)
 emb_tags = list(set(data["EMB_Span"]))
 n_emb_tags = len(emb_tags)
 
