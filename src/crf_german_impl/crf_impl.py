@@ -326,7 +326,7 @@ class CRF(Layer):
         best_paths = K.reverse(best_paths, 1)
         self.format_print("best_path_reverse", best_paths)
         best_paths = K.squeeze(best_paths, 2)
-        self.fromat_print("best_path_squeeze", best_paths)
+        self.format_print("best_path_squeeze", best_paths)
         self.format_print("K.one_hot", K.one_hot(best_paths, self.units))
 
         return K.one_hot(best_paths, self.units)

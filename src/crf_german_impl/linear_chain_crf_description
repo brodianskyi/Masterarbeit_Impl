@@ -938,25 +938,24 @@ c) Take first values from "best" indicies for initialization before loop through
     find_path = step_function()
     input_length = /where X=(batch_size, max_seq_len, embedding_dim)/ = max_seq_len = 5
 -------------------------------------------------------------------------------
-Compute step_function -> find_path(argmin_table!, best_idx):
+Compute step_function -> find_path(...):
 
-  Iteration 0:
-    Input parameters:
-      1) argmin_table = shape(2, 4) = take elements argmin_tables(:, 0, :)
+Iteration 0:
+find_path(argmin_table, best_idx):
+    argmin_table = shape(2, 4) = take elements argmin_tables(:, 0, :)
 
          argmin_table = [[0 0 0 0]
                          [2 2 2 2]]
 
-      2) best_idx = Iteration 0 = initial_best_idx = shape(2, 1)
+    best_idx = Iteration 0 = initial_best_idx = shape(2, 1)
 
-         best_idx = [[0][2]]
+         best_idx = [[0][2]] - в первой итерации просто два первых элем из argmin_table (совпадает со второй итерацией так просто совпало)
 
 -----------------------------------------------------------------------------
-find next best index ->  next_best_idx = gather_each_row(argmin_table, best_idx[0][:, 0]) ->
-                         call function gather_each_row(params, indices)
-    1) params = argmin_table
-    2) indices =  best_idx[0][:, 0] = [0 2]
---------------------------------------------
+4.1) next_best_idx = gather_each_row(argmin_table,  best_idx[0][:, 0]) ->
+-----------------
+best_idx[0][:, 0] = [0 2] further as "indices"
+-----------------------------------------------------------------------------
 a)  n = K.shape(indices)[0] = 2 (two elements in tensor)
 
 b) indices = K.transpose(K.stack([tf.range(n), indices]))
@@ -964,20 +963,33 @@ b) indices = K.transpose(K.stack([tf.range(n), indices]))
    b1) tf.range(n) = create tensor with elem in range(0,2) = [0, 1] = shape(2,)
    b2) K.stack -> merge two tensors(tf.range(n) and indices) =
        K.stack = [[0 1]
-                  [0 2]]
+                  [0! 2!]]
 
-b) indices = K.transpose -> транспонируем =
-        [[0 1]    ->  [[0 0]
-        [0 2]]         [1 2]]
+b) indices = K.transpose -> транспонируем
+        [[0$ 1$]    ->   [[0$ 0!]     / it is always [0$ 1$] -> two elements n=2 -> always take from string [0] and [1]
+         [0! 2!]]         [1$ 2!]]    / 0$ строка елемент с позиции [0!]; 1$ строка с позиции [2]
+-----------------------------------------------------------------------------------
+4.1) next_best_idx = gather_each_row =  tf.gather_nd(params, indices)) -> tf.gather_each_row(params, [[0$ 0!],[1$ 2!]]) -> elem[0$ 0!]= 0#; elem[1$ 2!] = 2#.
+ ->  argmin_table = params= [[0# 0 0 0],
+                             [2 2 2# 2]]
 
-gather_each_row returns ->  tf.gather_nd(params, indices)) = [0 2]
-------------back to find_path()-------------------------------
-c)  next_best_idx =  [0 2]
+4.1)  next_best_idx = [[0][2]]
 -------------------------------------------------------------
-
-  Output Iteration 0 = next_best_idx, [next_best_idx]
-  = <[0, 2]>, <[0, 2]>
+Output Iteration 0 = next_best_idx, [next_best_idx] = <[[0][2]]>, <[ [[0][2]] ]>
 --------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
   Iteration 1:
-    Input parameters:
+    find_path(argmin_table, best_idx):
+      argmin_table = [[1 1 1 1]
+                      [0 0 0 0]]
+
+      best_idx = best_idx from previous iteration = next_best_idx
+               = [[0][2]]
+-----------------------------------
+next_best_idx = gather_each_row(argmin_table,  best_idx[0][:, 0])
+-------------
+best_idx[0][:, 0] = [0 2] further as "indices"
+
+after transpose = [[0 0]
+                   [1 2]]
+                   
