@@ -323,6 +323,7 @@ class CRF(Layer):
 
         _, best_paths, _ = K.rnn(find_path, argmin_tables, initial_best_idx,
                                  input_length=K.int_shape(X)[1], unroll=self.unroll)
+        self.format_print("best_path_before_reverse", best_paths)
         best_paths = K.reverse(best_paths, 1)
         self.format_print("best_path_reverse", best_paths)
         best_paths = K.squeeze(best_paths, 2)

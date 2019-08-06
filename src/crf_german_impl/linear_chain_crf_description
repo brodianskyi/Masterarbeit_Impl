@@ -901,7 +901,7 @@ VITERBI FORWARD RECURSION:
        [3. 3. 3. 3.] -> best at iteration 1
        [0. 0. 0. 0.] -> best at iteration 2
        [1. 1. 1. 1.] -> best at iteration 3
-       [0. 0. 0. 0.]] -> best at iteration 4
+       [0. 0. 0. 0.!]] -> best at iteration 4
 
       [[0. 0. 0. 0.] -> best at iteration 0
        [1. 1. 1. 1.] -> best at iteration 1
@@ -973,9 +973,9 @@ b) indices = K.transpose -> транспонируем
  ->  argmin_table = params= [[0# 0 0 0],
                              [2 2 2# 2]]
 
-4.1)  next_best_idx = [[0][2]]
+4.1)  next_best_idx = [[0#][2#]] - we need only one best index pro batch -> for 1 batch is [0], for second is [2]
 -------------------------------------------------------------
-Output Iteration 0 = next_best_idx, [next_best_idx] = <[[0][2]]>, <[ [[0][2]] ]>
+Output Iteration 0 = next_best_idx, [next_best_idx] = <[[0][2]]>, <[[0][2]]>
 --------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
   Iteration 1:
@@ -986,10 +986,152 @@ Output Iteration 0 = next_best_idx, [next_best_idx] = <[[0][2]]>, <[ [[0][2]] ]>
       best_idx = best_idx from previous iteration = next_best_idx
                = [[0][2]]
 -----------------------------------
-next_best_idx = gather_each_row(argmin_table,  best_idx[0][:, 0])
+4.1. next_best_idx = gather_each_row(argmin_table,  best_idx)
 -------------
-best_idx[0][:, 0] = [0 2] further as "indices"
+best_idx = [0! 2!]
 
-after transpose = [[0 0]
-                   [1 2]]
-                   
+best_idx after transpose = [[0 0!]
+                            [1 2!]]
+
+tf.gather_nd = [[0$ 0!],[1$ 2!]]) -> [0$ 0!] = 1# and [1$ 2!] = 0#
+argmin_table = params= [[1# 1 1 1],
+                        [0 0 0# 0]]
+-------------------------
+4.1. Itert1 Output =  next_best_idx = [[1#][0#]]
+-----------------------------------------------------------------------------------
+  Iteration 2:
+     argmin_tabel = [[0 0 0 0]
+                     [3 3 3 3]]
+
+     best_idx = Iter1 Output = [[1][0]] -> from first string elem[1] and from second string elem[0]
+
+      argmin_tabel = [[0 0# 0 0]
+                      [3# 3 3 3]]
+-------------------------
+4.1. Itert2 Output =  next_best_idx = [[0#][3#]]
+-----------------------------------------------------------------------------------
+  Iteration 3:
+     argmin_tabel =[[3 3 3 3]
+                    [1 1 1 1]]
+
+     best_idx = Iter2 Output = [[0][3]] -> from first string elem[0] and from second string elem[3]
+
+      argmin_tabel = [[3# 3 3 3]
+                      [1 1 1 1#]]
+---------------------------------------
+-------------------------
+4.1. Itert3 Output =  next_best_idx = [[3#][1#]]
+-----------------------------------------------------------------------------------
+  Iteration 4(last):
+     argmin_tabel = [[0 0 0 0]
+                     [0 0 0 0]]
+
+     best_idx = Iter3 Output = [[3][1]] -> from first string elem[3] and from second string elem[1]
+
+      argmin_tabel = [[0 0 0 0#]
+                      [0 0# 0 0]]
+---------------------------------------
+4.1. Itert4 Output =  next_best_idx = [[0#][0#]]
+-------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+--------argmin_tabel------------
+  [[[0. 0. 0. 0.]
+    [3. 3. 3. 3.]
+    [0. 0. 0. 0.]
+    [1. 1. 1. 1.]
+    [0. 0. 0. 0.]]
+
+   [[0. 0. 0. 0.]
+    [1. 1. 1. 1.]
+    [3. 3. 3. 3.]
+    [0. 0. 0. 0.]
+    [2. 2. 2. 2.]]]
+--------------------
+For each string of argmin_table only one best value of this string
+4) best_path (after loop) =
+   best_path = reverse(best_path) ->(bring back to the default order) from BEST_PATH = (2, 5, 1)=
+      [[[0]
+        [3]
+        [0]
+        [1]
+        [0]]
+
+       [[0]
+        [1]
+        [3]
+        [0]
+        [2]]]
+-----------------------------
+5) best_path = K.squeeze(best_path, 2) -> to squeeze dim[2] = from (2,5,1) to (2,5) =
+   [[0 3 0 1 0]
+    [0 1 3 0 2]]
+------------------------------
+6) best_path = K.one_hot(best_path, self.units) /self.units = n_tags = 4/
+   best_path =
+     [[[1. 0. 0. 0.]
+        [0. 0. 0. 1.]
+        [1. 0. 0. 0.]
+        [0. 1. 0. 0.]
+        [1. 0. 0. 0.]]
+
+       [[1. 0. 0. 0.]
+        [0. 1. 0. 0.]
+        [0. 0. 0. 1.]
+        [1. 0. 0. 0.]
+        [0. 0. 1. 0.]]]
+--------------------------- Example------------------------
+argmin_table=
+[[[2 0 1 0]
+  [1 3 2 1]
+  [1 2 3 2]
+  [1 1 2 1]
+  [2 0 1 0]]
+
+ [[1 0 2 0]
+  [1 3 1 1]
+  [3 3 3 1]
+  [0 3 0 0]
+  [2 2 2 1]]]
+
+--------------After reverse-------
+argmin_table=
+[[[2 0 1 0]
+  [1 1 2 1]
+  [1 2 3 2]
+  [1 3 2 1]
+  [2 0 1 0]]
+
+ [[2 2 2 1]
+  [0 3 0 0]
+  [3 3 3 1]
+  [1 3 1 1]
+  [1 0 2 0]]]
+
+
+best_path =
+ [[[1]
+  [1]
+  [2]
+  [2]
+  [1]]
+
+ [[2]
+  [0]
+  [3]
+  [1]
+  [0]]]
+---------------back to normal----------
+best_path =
+[[[1]
+  [2]
+  [2]
+  [1]
+  [1]]
+
+ [[0]
+  [1]
+  [3]
+  [0]
+  [2]]]
+-------------------------End of Example-----------------------------
+  

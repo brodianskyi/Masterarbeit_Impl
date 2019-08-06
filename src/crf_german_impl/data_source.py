@@ -91,6 +91,7 @@ left_boundary = K.cast(tf.constant(np.random.randint(10, 300, size=(4,))), K.flo
 right_boundary = K.cast(tf.constant(np.random.randint(10, 300, size=(4,))), K.floatx())
 
 # argmin_table shape = (2, 5, 4)
+'''
 argmin_table = tf.constant(
     [
         [
@@ -107,6 +108,28 @@ argmin_table = tf.constant(
             [3, 3, 3, 3],
             [0, 0, 0, 0],
             [2, 2, 2, 2]
+        ]
+    ]
+    , dtype="float32"
+)
+'''
+
+argmin_table = tf.constant(
+    [
+        [
+            [2, 0, 1, 0],
+            [1, 3, 2, 1],
+            [1, 2, 3, 2],
+            [1, 1, 2, 1],
+            [2, 0, 1, 0]
+        ]
+        ,
+        [
+            [1, 0, 2, 0],
+            [1, 3, 1, 1],
+            [3, 3, 3, 1],
+            [0, 3, 0, 0],
+            [2, 2, 2, 1]
         ]
     ]
     , dtype="float32"

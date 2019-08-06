@@ -1,6 +1,7 @@
 import unittest
 
 import tensorflow as tf
+import keras.backend as K
 
 import src.crf_german_impl.data_source as d_src
 from src.crf_german_impl.crf_impl import CRF
@@ -28,3 +29,4 @@ class LayerTest(unittest.TestCase):
         crf.right_boundary = d_src.right_boundary
         # call(X, mask)
         crf.call(d_src.X, d_src.mask)
+
