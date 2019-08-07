@@ -1,0 +1,241 @@
+------------------------------------------------------------------
+               CALCULATION OF THE TOTAL_ENERGY
+          def get_energy(y_true, input_energy, mask)
+--------------------------------------------------------------------
+------------------------------------------------------------
+----------------Input data--------------------------------
+a) y_true = (2,5,4) = (batch_size,max_seq_len,n_tags)
+    [[[1. 0. 0. 0.]
+      [0. 0. 0. 1.]
+      [1. 0. 0. 0.]
+      [0. 1. 0. 0.]
+      [1. 0. 0. 0.]]
+
+      [[1. 0. 0. 0.]
+      [0. 1. 0. 0.]
+      [0. 0. 0. 1.]
+      [1. 0. 0. 0.]
+      [0. 0. 1. 0.]]]
+
+b)input_energy = (2,5,4) = (batch_size,max_seq_len,n_tags)
+    [[[ 56.  72.  88. 104.]
+      [ 98. 116. 134. 152.]
+      [132. 156. 180. 204.]
+      [172. 204. 236. 268.]
+      [121. 146. 171. 196.]]
+
+     [[136. 160. 184. 208.]
+      [ 94. 112. 130. 148.]
+      [ 86. 100. 114. 128.]
+      [128. 152. 176. 200.]
+      [138. 160. 182. 204.]]]
+
+c)mask = (2,5)= (batch_size, max_seq_len)
+     [[ True  True  True False False]
+     [ True  True  True  True False]]
+-------------------Calculation of input_energy-----------------------------------------
+1) input_energy = K.sum(input_energy * y_true, 2)
+a) input_energy * y_true = (2, 5, 4) =
+  [[[ 56.   0.   0.   0.]
+    [  0.   0.   0. 152.]
+    [132.   0.   0.   0.]
+    [  0. 204.   0.   0.]
+    [121.   0.   0.   0.]]
+
+    [[136.   0.   0.   0.]
+    [  0. 112.   0.   0.]
+    [  0.   0.   0. 128.]
+    [128.   0.   0.   0.]
+    [  0.   0. 182.   0.]]]
+1)input_energy = K.sum=(2,5)->(batch_size, max_seq_len) sum in dim[2] = 56 + 0 + 0 + 0... -> to exclude all zeros
+    [[ 56. 152. 132. 204. 121.]
+    [136. 112. 128. 128. 182.]]
+-----------------------------------------------------------------------------------
+-------------------Calculation of chain_energy------------------------------------------------------
+Idea of doing (y_true[:, :-1, :]*chain_energy) * y_true[:, 1:, :] = imitation on transition
+from current tag (y_true[:, :-1, :]*chain_energy) to the next y_true[:, 1:, :]
+1!) (y_true[:, :-1, :]*chain_energy) = current tag * chain_energy
+2)  y_true[:, 1:, :] * (1!) = shift to the next tag * already previous tag(1!)
+--------------------------------------------------------------------------
+2)chain_energy = K.sum(K.dot(y_true[:, :-1, :], self.chain_kernel) * y_true[:, 1:, :], 2)
+a) y_true[:, :-1, :] = (2,4,4)= do not take last string in dim [1]
+
+
+    =  [[[1. 0. 0. 0.]
+        [0. 0. 0. 1.]
+        [1. 0. 0. 0.]
+        [0. 1. 0. 0.]]
+
+         [[1. 0. 0. 0.]
+          [0. 1. 0. 0.]
+          [0. 0. 0. 1.]
+          [1. 0. 0. 0.]]]
+b)self.chain_kernel = (from data_source) = (4,4)=(n_tags,n_tags)
+
+          [[ 1.  2.  3.  4.]
+           [ 5.  6.  7.  8.]
+           [ 9. 10. 11. 12.]
+           [13. 14. 15. 16.]]
+
+c)K.dot = K.dot(y_true[:, :-1, :], self.chain_kernel) = (2,4,4)*(4,4)
+
+      [[[ 1.  2.  3.  4.]
+        [13. 14. 15. 16.]
+        [ 1.  2.  3.  4.]
+        [ 5.  6.  7.  8.]]
+
+       [[ 1.  2.  3.  4.]
+        [ 5.  6.  7.  8.]
+        [13. 14. 15. 16.]
+        [ 1.  2.  3.  4.]]]
+
+d)y_true[:, 1:, :] = (2, 4, 4) =  do not take first string in dim [1]
+
+         [[[0. 0. 0. 1.]
+            [1. 0. 0. 0.]
+            [0. 1. 0. 0.]
+            [1. 0. 0. 0.]]
+
+            [[0. 1. 0. 0.]
+            [0. 0. 0. 1.]
+            [1. 0. 0. 0.]
+            [0. 0. 1. 0.]]]
+
+e)  K.dot(y_true[:, :-1, :], self.chain_kernel) * y_true[:, 1:, :] = dot(все кроме последней строки, chain) * кроме первой строки  =
+
+          [[[ 0.  0.  0.  4.]
+            [13.  0.  0.  0.]
+            [ 0.  2.  0.  0.]
+            [ 5.  0.  0.  0.]]
+
+            [[ 0.  2.  0.  0.]
+            [ 0.  0.  0.  8.]
+            [13.  0.  0.  0.]
+            [ 0.  0.  3.  0.]]]
+
+2) chain_energy =  K.sum(dot(все кроме последней строки, chain) * кроме первой строки),2)->
+   to exclude zeros = shape(2,4)=
+
+2)  chain_energy = [[ 4. 13.  2.  5.]
+                    [ 2.  8. 13.  3.]
+
+---------------------If MASK IS NOT NONE-> Calculation of chain_mask-----------------------------------------------------------
+---------------------If MASK IS NON go to the Calculation of total_energy(Step#6)---------
+mask = (2,5) =
+           [[1. 1. 1. 0. 0.]
+            [1. 1. 1. 1. 0.]]
+
+-------------------По анологии с y_true[:, :-1, :]*y_true[:, 1:, :]----------------------
+3)chain_mask = mask[:, :-1] * mask[:, 1:]
+
+a) mask[:, :-1] = [[1.-> 1&. 1. 0.]              -> transition
+                   [1.-> 1&. 1. 1.]]
+
+b) mask[:, 1:].shape =
+                  [[1&. 1. 0. 0.]
+                   [1&. 1. 1. 0.]]
+
+3) chain_mask = (2,4)= multiplication current and next state =
+            [[1. 1. 0. 0.]
+            [1. 1. 1. 0.]]
+--------------------Calculation of  input_energy with mask-----------------------------------------------------
+4)input_energy = input_energy * mask =
+[[ 56. 152. 132. 204. 121.]
+[136. 112. 128. 128. 182.]]
+*
+[[1. 1. 1. 0. 0.]
+ [1. 1. 1. 1. 0.]]
+ =
+ [[ 56. 152. 132.   0.   0.]
+ [136. 112. 128. 128.   0.]]
+--------------Calculation of the chain_energy with mask-------------------------------------------------------
+5)chain_energy=chain_energy*chain_mask
+ [[ 4. 13.  2.  5.]
+  [ 2.  8. 13.  3.]]
+  *
+  [[1. 1. 0. 0.]
+  [1. 1. 1. 0.]]
+  =
+  [[ 4. 13.  0.  0.]
+   [ 2.  8. 13.  0.]]
+--------------------Calculation of the total_energy --------------------------------------------
+
+6) total_energy = K.sum(input_energy, -1) + K.sum(chain_energy, -1)
+
+a)  input_energy = [[ 56. 152. 132.   0.   0.]
+                    [136. 112. 128. 128.   0.]]
+a) K.sum(input_energy, -1) = shape =(2,)=(batch_size) -> sum over strings =
+    [340. 504.]
+c) chain_energy = [[ 4. 13.  0.  0.]
+                   [ 2.  8. 13.  0.]]
+b) K.sum(chain_energy, -1) = shape =(2,)=(batch_size) =
+     [17. 23.]
+6) Output is = total_energy =
+     [357. 527.]
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+                   CALCULATION OF NORMALIZATION CONSTANT
+                   get_log_normalization_constant(input_energy, mask, )
+---------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+Call function recursion() -> then step_function(input_energy_t, states, !return_logZ=True!)
+--------------------------------------------------------------------------------
+The same algorithm as for Viterbi last time(example for the input data as for Vitrabi last time),
+until -> calculation of the energy:
+1) energy=chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2) - ! WE DO MINUS(-prev_target_val)!, because если брать плюс и складывать с отрицательными значениями, то мы уйдем в жесткие минуса в итоге, а так минус на минус
+    for Viterbi it was "+" -> K.expand_dims(input_energy_t + prev_target_val, 2)
+    where prev_target_val = K.min(energy, 1)
+----------------------------------------------------------------
+Iteration 0 :
+ 1) energy=chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2)
+
+ a)prev_target_val=shape(2,4)-> there is not previos_target for the Iteration_0=
+       [[0. 0. 0. 0.]
+        [0. 0. 0. 0.]]
+
+b)input_energy - prev_target_val=
+    [[40. 48. 56. 64.]
+     [ 0.  0.  0.  0.]]
+     -
+     [[0., 0., 0., 0.],
+       [0., 0., 0., 0.]]
+     =
+     [[40. 48. 56. 64.]
+      [ 0.  0.  0.  0.]]
+c) K.expand_dims(input_energy_t - prev_target_val, 2)=
+    [[[40.]
+      [48.]
+      [56.]
+      [64.]]
+
+      [[ 0.]
+      [ 0.]
+      [ 0.]
+      [ 0.]]]
+1) energy = chain_energy + K.expand_dims(...)=
+    [[[41. 42. 43. 44.]
+      [53. 54. 55. 56.]
+      [65. 66. 67. 68.]
+      [77. 78. 79. 80.]]
+
+      [[ 0.  0.  0.  0.]
+      [ 0.  0.  0.  0.]
+      [ 0.  0.  0.  0.]
+      [ 0.  0.  0.  0.]]]
+------------!Calculation of the logsumexp!--------------------
+2)new_target_val = K.logsumexp(-energy, 1) -> Computes log(sum(exp(elements across dimensions of a tensor)))
+  Return after Iteration 0:
+  new_target_val = shape(2,4)
+  [[-40.999992  -41.999992  -42.999992  -43.999992]
+   [1.3862944   1.3862944   1.3862944   1.3862944]]
+----------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------------------------

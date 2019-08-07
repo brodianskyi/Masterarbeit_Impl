@@ -3,6 +3,7 @@ import tensorflow as tf
 
 tf.enable_eager_execution()
 
+
 def crf_nll(y_true, y_pred, crf):
     # implementation of the negative log-likelihood for CRF
     # used only in join mode

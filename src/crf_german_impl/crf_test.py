@@ -1,5 +1,4 @@
 import unittest
-
 import tensorflow as tf
 import src.crf_german_impl.data_source as d_src
 from src.crf_german_impl.crf_impl import CRF
@@ -28,3 +27,4 @@ class LayerTest(unittest.TestCase):
         crf.call(d_src.X, d_src.mask)
         crf_loss(d_src.y_true, d_src.y_pred, crf)
         crf_viterbi_accuracy(d_src.y_true, d_src.y_pred, crf)
+

@@ -572,7 +572,7 @@ g1) chain_energy = shape(1, 4, 4) =
         [ 9., 10., 11., 12.],
         [13., 14., 15., 16.]]]
 
- g2!!!) m[:, 0] * m[:, 1] = (LINEAR CHAIN REALIZATION) = shape(2)*shape(2)= [1., 0.] * [1., 1.] = [1., 0.]
+ g2!!!) m[:, 0] * m[:, 1] =  shape(2)*shape(2)= [1., 0.] * [1., 1.] = [1., 0.]
 
  g3) K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1])) = from shape(2) to shape(2,1,1) =  [[[1.]],[[0.]]]
 

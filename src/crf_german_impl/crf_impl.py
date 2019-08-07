@@ -383,17 +383,37 @@ class CRF(Layer):
         return energy
 
     def get_energy(self, y_true, input_energy, mask):
-        # B = batch_size(2), T = ?
+        # B = batch_size(2), T = max_seq_len = 5
+        self.format_print("y_true", y_true)
+        self.format_print("input_energy", input_energy)
+        self.format_print("mask", mask)
+        self.format_print("input_energy * y_true", input_energy * y_true)
         input_energy = K.sum(input_energy * y_true, 2)  # (B, T)
+        self.format_print("input_energy", input_energy)
         # (B, T-1)
+        self.format_print("y_true[:, :-1, :]", y_true[:, :-1, :])
+        self.format_print("self.chain_kernel", self.chain_kernel)
+        self.format_print("K.dot", K.dot(y_true[:, :-1, :], self.chain_kernel))
+        self.format_print("y_true[:, 1:, :]", y_true[:, 1:, :])
+        self.format_print("K.dot * y_true", K.dot(y_true[:, :-1, :], self.chain_kernel) * y_true[:, 1:, :])
         chain_energy = K.sum(K.dot(y_true[:, :-1, :], self.chain_kernel) * y_true[:, 1:, :], 2)
+        self.format_print("chain_energy", chain_energy)
         if mask is not None:
             mask = K.cast(mask, K.floatx())
             # (B, T-1), mask[:, :-1]*mask[:,1:] makes it work with any padding
+            self.format_print("mask", mask)
+            self.format_print("mask[:, :-1]", mask[:, :-1])
+            self.format_print("mask[:, 1:]", mask[:, 1:])
             chain_mask = mask[:, :-1] * mask[:, 1:]
+            self.format_print("chain_mask", chain_mask)
             input_energy = input_energy * mask
+            self.format_print("input_energy", input_energy)
             chain_energy = chain_energy * chain_mask
+            self.format_print("chain_energy", chain_energy)
+        self.format_print("K.sum(input_energy, -1)",  K.sum(input_energy, -1))
+        self.format_print("K.sum(chain_energy, -1)", K.sum(chain_energy, -1))
         total_energy = K.sum(input_energy, -1) + K.sum(chain_energy, -1)  # (B, )
+        self.format_print("total_energy", total_energy)
 
         return total_energy
 
@@ -413,8 +433,9 @@ class CRF(Layer):
             input_energy = self.add_boundary_energy(input_energy, mask,
                                                     self.left_boundary,
                                                     self.right_boundary)
-            self.format_print("input_energy", input_energy)
+            self.format_print("input_energy with boundary", input_energy)
         energy = self.get_energy(y_true, input_energy, mask)
+        self.format_print("energy", energy)
         # input_length = max_seq_length = 5
         logZ = self.get_log_normalization_constant(input_energy, mask, input_length=K.int_shape(X)[1])
         nloglik = logZ + energy
@@ -541,10 +562,17 @@ class CRF(Layer):
         # return_logZ = False -> compute the Viterbi best path
         if return_logZ:
             # shapes: (1, B, F) + (B, F, 1) -> (B, F, F)
+            self.format_print("chain_energy", chain_energy)
+            self.format_print("input_energy_t", input_energy_t)
+            self.format_print("prev_target_val", prev_target_val)
+            self.format_print("input_energy_t - prev_target_val", input_energy_t - prev_target_val)
+            self.format_print("K.expand_dims", K.expand_dims(input_energy_t - prev_target_val, 2))
             energy = chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2)
+            self.format_print("energy", energy)
             # shape: (B, F)
             # Computes partition_function log(sum(exp(elements across dimensions of a tensor)))
             new_target_val = K.logsumexp(-energy, 1)
+            self.format_print(" [new_target_val, i + 1]", new_target_val)
             return new_target_val, [new_target_val, i + 1]
         else:
             # self.format_print("input_energy_t + prev_target_val", input_energy_t + prev_target_val)

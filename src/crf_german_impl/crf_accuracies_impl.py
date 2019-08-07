@@ -18,6 +18,7 @@ def _get_accuracy(y_true, y_pred, mask, sparse_target=False):
         mask = K.cast(mask, K.floatx())
         return K.sum(judge * mask) / K.sum(mask)
 
+
 def crf_viterbi_accuracy(y_true, y_pred, crf):
     X = d_src.X
     mask = d_src.mask

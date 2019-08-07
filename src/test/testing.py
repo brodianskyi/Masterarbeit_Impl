@@ -8,8 +8,11 @@ my_tensor = tf.constant(
     , dtype="float32"
 )
 
-indices = [[0, 1],
-           [1, 2]]
+a = my_tensor[:, :2]
 
-a = tf.gather_nd(my_tensor, indices)
+b = my_tensor[:, 1:]
+
+
 print(a)
+print(b)
+print(a*b)
