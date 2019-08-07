@@ -4,13 +4,11 @@ import tensorflow as tf
 import src.crf_german_impl.data_source as d_src
 from src.crf_german_impl.crf_impl import CRF
 from src.crf_german_impl.crf_loss_impl import crf_loss
-
+from src.crf_german_impl.crf_accuracies_impl import crf_viterbi_accuracy
 
 
 class LayerTest(unittest.TestCase):
     tf.enable_eager_execution()
-
-
 
     def test_crf_layer(self):
         n_tags = d_src.n_tags
@@ -29,7 +27,4 @@ class LayerTest(unittest.TestCase):
         # call(X, mask)
         crf.call(d_src.X, d_src.mask)
         crf_loss(d_src.y_true, d_src.y_pred, crf)
-
-
-
-
+        crf_viterbi_accuracy(d_src.y_true, d_src.y_pred, crf)

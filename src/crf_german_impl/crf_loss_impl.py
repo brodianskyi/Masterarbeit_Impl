@@ -1,5 +1,7 @@
 import src.crf_german_impl.data_source as d_src
+import tensorflow as tf
 
+tf.enable_eager_execution()
 
 def crf_nll(y_true, y_pred, crf):
     # implementation of the negative log-likelihood for CRF
@@ -8,6 +10,7 @@ def crf_nll(y_true, y_pred, crf):
     X = d_src.X
     mask = d_src.mask
     nloglik = crf.get_negative_log_likelihood(y_true, X, mask)
+    print("------------nloglik", nloglik)
     return nloglik
 
 

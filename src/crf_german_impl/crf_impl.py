@@ -382,9 +382,49 @@ class CRF(Layer):
             self.format_print("final_energy = input_energy * start_mask * start + end_mask * end", energy)
         return energy
 
+    def get_energy(self, y_true, input_energy, mask):
+        # B = batch_size(2), T = ?
+        input_energy = K.sum(input_energy * y_true, 2)  # (B, T)
+        # (B, T-1)
+        chain_energy = K.sum(K.dot(y_true[:, :-1, :], self.chain_kernel) * y_true[:, 1:, :], 2)
+        if mask is not None:
+            mask = K.cast(mask, K.floatx())
+            # (B, T-1), mask[:, :-1]*mask[:,1:] makes it work with any padding
+            chain_mask = mask[:, :-1] * mask[:, 1:]
+            input_energy = input_energy * mask
+            chain_energy = chain_energy * chain_mask
+        total_energy = K.sum(input_energy, -1) + K.sum(chain_energy, -1)  # (B, )
+
+        return total_energy
+
+    def get_log_normalization_constant(self, input_energy, mask, **kwargs):
+        # compute logarithm of normalization constant Z, where
+        # Z = sum exp(-E) -> logZ = log sum exp(-E) = -nlogZ
+        # should have logZ[:, i] == logZ[:, j] for any i, j
+        logZ = self.recursion(input_energy, mask, return_sequences=False, **kwargs)
+        return logZ[:, 0]
+
     def get_negative_log_likelihood(self, y_true, X, mask):
+        # Computation of the negative log likelihood
+        # negative_log_like = -log(1/Z * exp(-E)) = logZ + E
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
-        return input_energy
+        self.format_print("input_energy", input_energy)
+        if self.use_boundary:
+            input_energy = self.add_boundary_energy(input_energy, mask,
+                                                    self.left_boundary,
+                                                    self.right_boundary)
+            self.format_print("input_energy", input_energy)
+        energy = self.get_energy(y_true, input_energy, mask)
+        # input_length = max_seq_length = 5
+        logZ = self.get_log_normalization_constant(input_energy, mask, input_length=K.int_shape(X)[1])
+        nloglik = logZ + energy
+
+        if mask is not None:
+            nloglik = nloglik / K.sum(K.cast(mask, K.floatx()), 1)
+        else:
+            nloglik = nloglik / K.cast(K.shape(X)[1], K.floatx())
+
+        return nloglik
 
     def recursion(self, input_energy, mask=None, go_backwards=False,
                   return_sequences=True, return_logZ=True, input_length=None):
