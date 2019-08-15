@@ -12,7 +12,7 @@ from keras_contrib.utils.test_utils import to_tuple
 import src.crf_german_impl.data_source as data_src
 
 
-class CRF(Layer):
+class FCRF(Layer):
     tf.enable_eager_execution()
     """
     !!!!!! KERAS_VERSION = "2.2.3" !!!!!!!
@@ -100,7 +100,7 @@ class CRF(Layer):
                  input_dim=None,
                  unroll=False,
                  **kwargs):
-        super(CRF, self).__init__(**kwargs)
+        super(FCRF, self).__init__(**kwargs)
         # self.inter_ses = tf.InteractiveSession()
         # -!!!self.oldStdout = sys.stdout
         # -!!!self.output_file = open("output.txt", "w")
@@ -170,23 +170,35 @@ class CRF(Layer):
         self.input_dim = input_shape[-1]
         # initialize kernel_weights_matrix(linear transformation of the inputs)
         # shape = (input_dim, units_crf=n_tags+1) = (50, 12) dtype=float32_ref
-        self.kernel = self.add_weight(shape=(self.input_dim, self.units),
+        self.kernel = self.add_weight(shape=(self.input_dim, sum(self.units)),
                                       name="kernel",
                                       initializer=self.kernel_initializer,
                                       regularizer=self.kernel_regularizer,
                                       constraint=self.kernel_constraint)
-        # initialize chain_weights_matrix, used for CRF chain energy functions
-        # shape = (units/units) = (n_tags+1/n_tags+1)
-        # shape = (12, 12) - (units(n_otr_tags)/units) - dtype=float32_ref
-        self.chain_kernel = self.add_weight(shape=(self.units, self.units),
-                                            name="chain_kernel",
-                                            initializer=self.chain_initializer,
-                                            regularizer=self.chain_regularizer,
-                                            constraint=self.chain_constraint)
+        # initialize chain_weights_matrices, used for FCRF chain energy functions
+        # chain_kernel for otr
+        self.chain_kernel_otr = self.add_weight(shape=(self.units[0], self.units[0]),
+                                                name="chain_kernel_otr",
+                                                initializer=self.chain_initializer,
+                                                regularizer=self.chain_regularizer,
+                                                constraint=self.chain_constraint)
+        # chain_kernel for emb
+        self.chain_kernel_emb = self.add_weight(shape=(self.units[1], self.units[1]),
+                                                name="chain_kernel_emb",
+                                                initializer=self.chain_initializer,
+                                                regularizer=self.chain_regularizer,
+                                                constraint=self.chain_constraint)
+        # chain_kernel for otr and emb
+        self.chain_kernel_otr_emb = self.add_weight(shape=(self.units[0], self.units[1]),
+                                                    name="chain_kernel_otr_emb",
+                                                    initializer=self.chain_initializer,
+                                                    regularizer=self.chain_regularizer,
+                                                    constraint=self.chain_constraint)
+
         # self.use_bias = True
         if self.use_bias:
             # shape = (12,) - dtype=float32_ref
-            self.bias = self.add_weight(shape=(self.units,),
+            self.bias = self.add_weight(shape=(sum(self.units),),
                                         name="bias",
                                         initializer=self.bias_initializer,
                                         regularizer=self.bias_regularizer,
@@ -197,13 +209,13 @@ class CRF(Layer):
         # self.use_boundary = True
         if self.use_boundary:
             # shape = (12,) - dtype=float32_ref
-            self.left_boundary = self.add_weight(shape=(self.units,),
+            self.left_boundary = self.add_weight(shape=(sum(self.units),),
                                                  name="left_boundary",
                                                  initializer=self.boundary_initializer,
                                                  regularizer=self.boundary_regularizer,
                                                  constraint=self.boundary_constraint)
             # shape = (12,) - dtype=float32_ref
-            self.right_boundary = self.add_weight(shape=(self.units,),
+            self.right_boundary = self.add_weight(shape=(sum(self.units),),
                                                   name="right_boundary",
                                                   initializer=self.boundary_initializer,
                                                   regularizer=self.boundary_regularizer,
@@ -274,7 +286,7 @@ class CRF(Layer):
                 input_energy, mask, self.left_boundary, self.right_boundary)
         self.format_print("input_energy add boundary energy", input_energy)
         argmin_tables = self.recursion(input_energy, mask, return_logZ=False)
-        argmin_tables = data_src.argmin_table
+        # argmin_tables = data_src.argmin_table
         self.format_print("argmin_tables = self.recursion", argmin_tables)
         argmin_tables = K.cast(argmin_tables, "int32")
         self.format_print("K.cast(argmin_tables, int32); argmin_tables", argmin_tables)
@@ -329,9 +341,10 @@ class CRF(Layer):
         self.format_print("best_path_reverse", best_paths)
         best_paths = K.squeeze(best_paths, 2)
         self.format_print("best_path_squeeze", best_paths)
-        self.format_print("K.one_hot", K.one_hot(best_paths, self.units))
+        # units ???? which number of tags should be
+        self.format_print("K.one_hot", K.one_hot(best_paths, 4))
 
-        return K.one_hot(best_paths, self.units)
+        return K.one_hot(best_paths, 4)
 
     def add_boundary_energy(self, energy, mask, start, end):
         # energy = activation((X*self.kernel) + self.bias) ->(?, 80, 12)
@@ -426,7 +439,7 @@ class CRF(Layer):
         logZ = self.recursion(input_energy, mask, return_sequences=False, **kwargs)
         return logZ[:, 0]
 
-    def get_negative_log_likelihood(self, y_true_1, y_true_2, X, mask):
+    def get_negative_log_likelihood(self, y_true_1, X, mask):
         # Computation of the negative log likelihood
         # negative_log_like = -log(1/Z * exp(-E)) = logZ + E
         # shape_of_kernel=(input_dim, units)
@@ -457,24 +470,14 @@ class CRF(Layer):
         If "return_logZ=True", compute the logZ, the normalization constant
         If "return_logZ=False", compute the Viterbi best path lookup table
         """
-        print("------------------------RECURSION------------")
-        # call -> argmin_tables = self.recursion(input_energy, mask, return_logZ=False)
-        # !------------------------------------------------------------!
-        # prev_target_val` has shape = (B, F)
-        # where B = batch_size, F = output feature dim
-        # !-----------------------------------------------------------!
-        # input_energy - (?, 80, 12) float32
-        # chain_energy-shape = (12, 12) - (n_otr_tags+1)/(n_otr_tags+1) - dtype = float32_ref
-        # number of features = n_otr_tags+1=n_units; shape = (F,F)
-        chain_energy = self.chain_kernel
-        # self.format_print("chain_energy", chain_energy)
-        # chain_energy_(1,12,12) -> expand to shape -> (1, F, F): F=num of output features. 1st F is for t-1, 2nd F for t
+        # add all energies
+        # all shapes is (2, 2), where n_otr_tags = n_emb_tags
+        chain_energy = self.chain_kernel_otr + self.chain_kernel_emb + self.chain_kernel_otr_emb
+        print("chain_energy", chain_energy)
+        # expand chain_energy to add this to input_energy
         chain_energy = K.expand_dims(chain_energy, 0)
-        # self.format_print("chain energy expand", chain_energy)
-        # shape=(B, F), dtype = float32
-        # take [0] element in each string -> from (?, 80, 12) to (?, 12)
-        # [ [[1,2,3],[3,4,5]],[ [5,6,7],[7,8,9]] ] -> (2,2,3) -> [[1,2,3][5,6,7]] -> prev_target_val shape = (2,3)
-        # previous_target_value to zero -> if we in position [1] init  [0] to zero
+        print("chain_energy_expand", chain_energy)
+        # initialize with zeros first row (transitions first tag to another)
         prev_target_val = K.zeros_like(input_energy[:, 0, :])
         # self.format_print("prev_target_val", prev_target_val)
         # go_backward = False
@@ -484,15 +487,8 @@ class CRF(Layer):
             input_energy = K.reverse(input_energy, 1)
             if mask is not None:
                 mask = K.reverse(mask, 1)
-        # K.zeros_like(prev_target_val[:, :1]) -> prev_target_val shape = (2,3) -> take first element in each string
-        # K.zeros_like(prev_target_val[:, :1]) -> from (2,3) to  K.zeros_like_shape - (2,1)
-        # initial_state - array[ prev_target_val shape = (2,3), K.zeros_like_shape - (2,1)]
-        # initial_state  array [shape(2,3), (2,1)]
         initial_states = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]
-        # self.format_print("initial_states", initial_states)
-        # chain_energy->(1, F, F)->shape(1,12,12)
         constants = [chain_energy]
-        # self.format_print("constants=[chain_energy]", constants)
         if mask is not None:
             # self.format_print("mask", mask)
             # self.format_print("K.zeros_like(mask[:, :1])", K.zeros_like(mask[:, :1]))
@@ -528,48 +524,21 @@ class CRF(Layer):
             return target_val_last
 
     def step(self, input_energy_t, states, return_logZ=True):
-        # if return_logZ = False -> compute the Viterbi best path
-        # self.format_print("input_energy_t", input_energy_t)
-        # self.format_print("states", states)
-        # self.format_print("states[:3]", states[:3])
         prev_target_val, i, chain_energy = states[:3]
-        # self.format_print("prev_target_val in step()", prev_target_val)
-        # self.format_print("i in step()", i)
-        # self.format_print("chain_energy in step()", chain_energy)
+        # t is used for mask computation
         t = K.cast(i[0, 0], dtype="int32")
-        # self.format_print("K.cast(i[0, 0], dtype=int32) = t", t)
-        # print("len(states) in step", len(states))
+        # If mask is used
         if len(states) > 3:
             if K.backend() == "theano":
                 m = states[3][:, t:(t + 2)]
             else:
-                # print("input=states[3]", states[3])
-                # slice(input, begin, size) if -1 - include all remaining elements
-                # size - number of elements for each dimension
                 m = K.slice(states[3], [0, t], [-1, 2])
-            # self.format_print("m", m)
-            # K.expand_dims -> by_default axis = -1
-            # self.format_print("m[:, 0]", m[:, 0])
-            # self.format_print("K.expand_dims m[:, 0]", K.expand_dims(m[:, 0]))
-            # self.format_print("input_energy_t", input_energy_t)
             input_energy_t = input_energy_t * K.expand_dims(m[:, 0])
-            # self.format_print("input_energy_t", input_energy_t)
-            # (1, F, F)*(B, 1, 1) -> (B, F, F)
-            # self.format_print("chain_energy", chain_energy)
-            # self.format_print("m[:, 1]", m[:, 1])
-            # self.format_print("m[:, 0] * m[:, 1]", m[:, 0] * m[:, 1])
-            # self.format_print("K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1]))",
-            # K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1])))
             chain_energy = chain_energy * K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1]))
-            # self.format_print("chain_energy", chain_energy)
-        # return_logZ = False -> compute the Viterbi best path
+            print("chain_energy", chain_energy)
+        # If normalization Z is computed
         if return_logZ:
             # shapes: (1, B, F) + (B, F, 1) -> (B, F, F)
-            self.format_print("chain_energy", chain_energy)
-            self.format_print("input_energy_t", input_energy_t)
-            self.format_print("prev_target_val", prev_target_val)
-            self.format_print("input_energy_t - prev_target_val", input_energy_t - prev_target_val)
-            self.format_print("K.expand_dims", K.expand_dims(input_energy_t - prev_target_val, 2))
             energy = chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2)
             self.format_print("energy", energy)
             # shape: (B, F)
@@ -579,20 +548,18 @@ class CRF(Layer):
             self.format_print(" [new_target_val, i + 1]", new_target_val)
             return new_target_val, [new_target_val, i + 1]
         else:
-            # self.format_print("input_energy_t + prev_target_val", input_energy_t + prev_target_val)
-            # self.format_print("K.expand_dims(input_energy_t + prev_target_val, 2)",
-            # K.expand_dims(input_energy_t + prev_target_val, 2))
+            # chain_energy is the same in all iterations
+            # input_energy_t takes next row from input_energy
+            # prev_target_val is min_energy from previous iteration
+            print("chain_energy", chain_energy)
+            print("input_energy_t", input_energy_t)
+            print("prev_target_val", prev_target_val)
+            print("K.expand_dims", K.expand_dims(input_energy_t + prev_target_val, 2))
             energy = chain_energy + K.expand_dims(input_energy_t + prev_target_val, 2)
-            # self.format_print("energy", energy)
-            # self.format_print("energy in step()", energy)
-            # axes=1 to find minimum values in a tensor
             min_energy = K.min(energy, 1)
             self.format_print("min_energy", min_energy)
-            # self.format_print("K.argmin(energy, 1)", K.argmin(energy, 1))
             argmin_table = K.cast(K.argmin(energy, 1), K.floatx())
             print("argmin_table", argmin_table)
-            # self.format_print("i+1", i+1)
-            # self.format_print("(argmin_table, [min_energy, i + 1])", [min_energy, i + 1])
             return argmin_table, [min_energy, i + 1]
 
     @staticmethod

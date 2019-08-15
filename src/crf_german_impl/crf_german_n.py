@@ -27,8 +27,15 @@ data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
 
 data = data.head(300)
+print("-------data", data)
 emb_tags = list(set(data["EMB_Span"]))
+print("-----emb_tags", emb_tags)
+otr_tags = list(set(data["OTR_Span"]))
+print("-----otr_tags", otr_tags)
 n_emb_tags = len(emb_tags)
+print("----n_emb_tags", n_emb_tags)
+n_otr_tags = len(otr_tags)
+print("----n_otr_tags", n_otr_tags)
 
 
 class SentenceGetter(object):

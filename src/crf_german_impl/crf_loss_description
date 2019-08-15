@@ -164,7 +164,7 @@ b) mask[:, 1:].shape =
 
 a)  input_energy = [[ 56. 152. 132.   0.   0.]
                     [136. 112. 128. 128.   0.]]
-a) K.sum(input_energy, -1) = shape =(2,)=(batch_size) -> sum over strings =
+a) K.sum(input_energy, -1) = shape =(2,)=(batch_size) -> sum over rows =
     [340. 504.]
 c) chain_energy = [[ 4. 13.  0.  0.]
                    [ 2.  8. 13.  0.]]
@@ -189,7 +189,7 @@ until -> calculation of the energy:
 Iteration 0 :
  1) energy=chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2)
 
- a)prev_target_val=shape(2,4)-> there is not previos_target for the Iteration_0=
+ a)prev_target_val=shape(2,4)-> there is no previos_target for the Iteration_0= initialize with zeros
        [[0. 0. 0. 0.]
         [0. 0. 0. 0.]]
 

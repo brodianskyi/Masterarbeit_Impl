@@ -8,11 +8,5 @@ my_tensor = tf.constant(
     , dtype="float32"
 )
 
-a = my_tensor[:, :2]
-
-b = my_tensor[:, 1:]
 
 
-print(a)
-print(b)
-print(a*b)
