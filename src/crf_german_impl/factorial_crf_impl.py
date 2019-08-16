@@ -472,11 +472,16 @@ class FCRF(Layer):
         """
         # add all energies
         # all shapes is (2, 2), where n_otr_tags = n_emb_tags
-        chain_energy = self.chain_kernel_otr + self.chain_kernel_emb + self.chain_kernel_otr_emb
-        print("chain_energy", chain_energy)
+        chain_energy_otr = self.chain_kernel_otr
+        chain_energy_emb = self.chain_kernel_emb
+        chain_energy_otr_emb = self.chain_kernel_otr_emb
         # expand chain_energy to add this to input_energy
-        chain_energy = K.expand_dims(chain_energy, 0)
-        print("chain_energy_expand", chain_energy)
+        chain_energy_otr = K.expand_dims(chain_energy_otr, 0)
+        chain_energy_emb = K.expand_dims(chain_energy_emb, 0)
+        chain_energy_otr_emb = K.expand_dims(chain_energy_otr_emb, 0)
+        print("chain_energy_otr", chain_energy_otr)
+        print("chain_energy_emb", chain_energy_emb)
+        print("chain_energy_otr_emb", chain_energy_otr_emb)
         # initialize with zeros first row (transitions first tag to another)
         prev_target_val = K.zeros_like(input_energy[:, 0, :])
         # self.format_print("prev_target_val", prev_target_val)
@@ -487,8 +492,9 @@ class FCRF(Layer):
             input_energy = K.reverse(input_energy, 1)
             if mask is not None:
                 mask = K.reverse(mask, 1)
+        # second parameter is "i" in loop
         initial_states = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]
-        constants = [chain_energy]
+        constants = [chain_energy_otr, chain_energy_emb, chain_energy_otr_emb]
         if mask is not None:
             # self.format_print("mask", mask)
             # self.format_print("K.zeros_like(mask[:, :1])", K.zeros_like(mask[:, :1]))
@@ -524,9 +530,12 @@ class FCRF(Layer):
             return target_val_last
 
     def step(self, input_energy_t, states, return_logZ=True):
-        prev_target_val, i, chain_energy = states[:3]
+        prev_target_val, i, chain_energy_otr, chain_energy_emb, chain_energy_otr_emb = states[:5]
+        self.format_print("prev_target_val",  prev_target_val)
+        self.format_print("i", i)
         # t is used for mask computation
         t = K.cast(i[0, 0], dtype="int32")
+        '''
         # If mask is used
         if len(states) > 3:
             if K.backend() == "theano":
@@ -536,8 +545,10 @@ class FCRF(Layer):
             input_energy_t = input_energy_t * K.expand_dims(m[:, 0])
             chain_energy = chain_energy * K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1]))
             print("chain_energy", chain_energy)
+        '''
         # If normalization Z is computed
         if return_logZ:
+            '''
             # shapes: (1, B, F) + (B, F, 1) -> (B, F, F)
             energy = chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2)
             self.format_print("energy", energy)
@@ -547,15 +558,18 @@ class FCRF(Layer):
             new_target_val = K.logsumexp(-energy, 1)
             self.format_print(" [new_target_val, i + 1]", new_target_val)
             return new_target_val, [new_target_val, i + 1]
+            '''
         else:
             # chain_energy is the same in all iterations
             # input_energy_t takes next row from input_energy
             # prev_target_val is min_energy from previous iteration
-            print("chain_energy", chain_energy)
-            print("input_energy_t", input_energy_t)
-            print("prev_target_val", prev_target_val)
-            print("K.expand_dims", K.expand_dims(input_energy_t + prev_target_val, 2))
-            energy = chain_energy + K.expand_dims(input_energy_t + prev_target_val, 2)
+            self.format_print("chain_energy_otr", chain_energy_otr)
+            self.format_print("chain_energy_emb", chain_energy_emb)
+            self.format_print("chain_energy_otr_emb", chain_energy_otr_emb)
+            self.format_print("prev_target_val", prev_target_val)
+            self.format_print("input_energy_t", input_energy_t)
+            self.format_print("K.expand_dims", K.expand_dims(input_energy_t + prev_target_val, 2))
+            energy = chain_energy_otr + chain_energy_emb + chain_energy_otr_emb + K.expand_dims(input_energy_t + prev_target_val, 2)
             min_energy = K.min(energy, 1)
             self.format_print("min_energy", min_energy)
             argmin_table = K.cast(K.argmin(energy, 1), K.floatx())

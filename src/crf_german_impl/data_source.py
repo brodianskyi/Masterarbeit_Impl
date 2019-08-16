@@ -5,7 +5,7 @@ from keras import backend as K
 tf.enable_eager_execution()
 
 n_otr_tags = 2
-n_emb_tags = 2
+n_emb_tags = 3
 batch_size = 1
 max_seq_len = 3
 embedding_dim = 4
@@ -40,12 +40,12 @@ kernel = tf.constant(np.arange(1, 9, dtype=np.float32), shape=[4, 2])
 # n_otr_tags = n_emb_tags = 2
 # shape = (n_otr_tags, n_otr_tags) = (2,2)
 chain_kernel_otr = tf.constant(np.arange(1, 5, dtype=np.float32), shape=[2, 2])
-# shape = (n_emb_tags, n_emb_tags) = (2,2)
-chain_kernel_emb = tf.constant(np.arange(3, 7, dtype=np.float32), shape=[2, 2])
+# shape = (n_emb_tags, n_emb_tags) = (3,3)
+chain_kernel_emb = tf.constant(np.arange(3, 12, dtype=np.float32), shape=[3, 3])
 
 # chain_kernel for otr and embedding tags
-# shape = (n_otr_tags, n_emb_tags) = (2,2)
-chain_kernel_otr_emb = tf.constant(np.arange(5, 9, dtype=np.float32), shape=[2, 2])
+# shape = (n_otr_tags, n_emb_tags) = (2,3)
+chain_kernel_otr_emb = tf.constant(np.arange(5, 11, dtype=np.float32), shape=[2, 3])
 
 # shape= (n_otr_tags,)
 bias = tf.constant(np.arange(1, 3, dtype=np.float32), shape=[2, ])
