@@ -18,7 +18,7 @@ class LayerTest(unittest.TestCase):
         crf.build(d_src.input_shape)
         # initialize weight for build()
         crf.kernel = d_src.kernel
-        crf.chain_kernel = d_src.chain_kernel
+        crf.chain_kernel = d_src.chain_kernel_otr
         crf.bias = d_src.bias
         # boundary: left_boundary
         crf.left_boundary = d_src.left_boundary
@@ -26,11 +26,11 @@ class LayerTest(unittest.TestCase):
         crf.right_boundary = d_src.right_boundary
         # call(X, mask)
         crf.call(d_src.X, d_src.mask)
-        # crf_loss(d_src.y_true_1, d_src.y_pred_1, crf)
+        crf_loss(d_src.y_true_1, d_src.y_pred_1, crf)
         # crf_viterbi_accuracy(d_src.y_true_1, d_src.y_pred_1, crf)
 
     def test_factorial_crf(self):
-        fcrf = FCRF(d_src.n_tags_arr)
+        fcrf = FCRF(d_src.n_tags)
         fcrf.build(d_src.input_shape)
         # initialize kernels
         fcrf.kernel = d_src.kernel

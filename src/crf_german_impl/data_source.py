@@ -4,60 +4,64 @@ from keras import backend as K
 
 tf.enable_eager_execution()
 
-n_otr_tags = 2
-n_emb_tags = 3
-batch_size = 1
-max_seq_len = 3
-embedding_dim = 4
-# output from Embedding layer, input for CRF-Layer
+# consider the case if there is the same number of tags in all tag sequences
+n_tags = 4
+batch_size = 2
+max_seq_len = 5
+embedding_dim = 3
 input_shape = (batch_size, max_seq_len, embedding_dim)
-n_tags_arr = [n_otr_tags, n_emb_tags]
 
-
-# shape_X = (batch_size, max_seq_len, embedding_dim) -> (1, 3, 4)
-
+# shape of X = (batch_size, max_seq_len, embedding_dim) -> (2, 5, 3)
 X = tf.constant(
     [
         [
-            [1, 2, 3, 4],
-            [5, 6, 7, 8],
-            [9, 10, 11, 12],
+            [7, 4, 3],
+            [3, 8, 6],
+            [5, 9, 9],
+            [8, 11, 12],
+            [10, 4, 10]
         ]
-
+        ,
+        [
+            [4, 8, 10],
+            [3, 9, 5],
+            [2, 4, 7],
+            [5, 10, 8],
+            [3, 7, 11]
+        ]
     ]
     , dtype="float32"
 )
 
+# shape of mask = (batch_size, max_seq_len) = (2, 5)
+mask = tf.constant([[True, True, True, False, False], [True, True, True, True, False]], dtype="bool")
 
-# shape = (batch_size, max_seq_len) = (1, 3)
-# mask = tf.constant([[True, True, True, False, False], [True, True, True, True, False]], dtype="bool")
-mask = tf.constant([[True, True, False]], dtype="bool")
+# shape of kernel = (embedding_dim, n_tags) = (3, 4)
+kernel = K.cast(tf.constant(np.random.randint(1, 13, size=(3, 4))), K.floatx())
 
-# shape = (embedding_dim, n_otr_tags) = (4, 2)
-kernel = tf.constant(np.arange(1, 9, dtype=np.float32), shape=[4, 2])
+# There is two sequences.
+# The first sequence called (otr).
+# The second sequence called (emb).
+# shape of chain_kernel_otr = (n_tags, n_tags) = (4, 4)
+chain_kernel_otr = tf.constant(np.arange(1, 17, dtype=np.float32), shape=[4, 4])
+# shape of chain_kernel_emb = (n_tags, n_tags) = (4, 4)
+chain_kernel_emb = tf.constant(np.arange(3, 19, dtype=np.float32), shape=[4, 4])
 
-# chain_kernel for otr and embedding tags
-# n_otr_tags = n_emb_tags = 2
-# shape = (n_otr_tags, n_otr_tags) = (2,2)
-chain_kernel_otr = tf.constant(np.arange(1, 5, dtype=np.float32), shape=[2, 2])
-# shape = (n_emb_tags, n_emb_tags) = (3,3)
-chain_kernel_emb = tf.constant(np.arange(3, 12, dtype=np.float32), shape=[3, 3])
+# chain_kernel for connections between sequence otr and emb
+# shape = (n_tags, n_tags) = (4, 4)
+chain_kernel_otr_emb = tf.constant(np.arange(5, 21, dtype=np.float32), shape=[4, 4])
 
-# chain_kernel for otr and embedding tags
-# shape = (n_otr_tags, n_emb_tags) = (2,3)
-chain_kernel_otr_emb = tf.constant(np.arange(5, 11, dtype=np.float32), shape=[2, 3])
+# shape of bias = (n_tags,) = (4,)
+bias = tf.constant(np.arange(1, 5, dtype=np.float32), shape=[4, ])
 
-# shape= (n_otr_tags,)
-bias = tf.constant(np.arange(1, 3, dtype=np.float32), shape=[2, ])
+# shape of left_boundary =  (n_tags,) = (4,)
+left_boundary = tf.constant(np.arange(2, 6, dtype=np.float32), shape=[4, ])
 
-# shape= (n_otr_tags)
-left_boundary = tf.constant(np.arange(1, 3, dtype=np.float32), shape=[2, ])
-
-# shape = (n_otr_tags,)
-right_boundary = tf.constant(np.arange(1, 3, dtype=np.float32), shape=[2, ])
+# shape of left_boundary =  (n_tags,) = (4,)
+right_boundary = tf.constant(np.arange(4, 8, dtype=np.float32), shape=[4, ])
 
 # data for crf_loss
-# shape of y_true = y_pred = (batch_size, max_seq_len, n_tags)=(2,5,4)
+# shape of y_true_1 = (batch_size, max_seq_len, n_tags)=(2, 5, 4)
 y_true_1 = tf.constant(
     [
         [
@@ -78,6 +82,8 @@ y_true_1 = tf.constant(
     ]
     , dtype="float32"
 )
+
+# shape of y_true = y_pred = (batch_size, max_seq_len, n_tags)=(2, 5, 4)
 
 y_true_2 = tf.constant(
     [

@@ -170,26 +170,26 @@ class FCRF(Layer):
         self.input_dim = input_shape[-1]
         # initialize kernel_weights_matrix(linear transformation of the inputs)
         # shape = (input_dim, units_crf=n_tags+1) = (50, 12) dtype=float32_ref
-        self.kernel = self.add_weight(shape=(self.input_dim, sum(self.units)),
+        self.kernel = self.add_weight(shape=(self.input_dim, self.units),
                                       name="kernel",
                                       initializer=self.kernel_initializer,
                                       regularizer=self.kernel_regularizer,
                                       constraint=self.kernel_constraint)
         # initialize chain_weights_matrices, used for FCRF chain energy functions
         # chain_kernel for otr
-        self.chain_kernel_otr = self.add_weight(shape=(self.units[0], self.units[0]),
+        self.chain_kernel_otr = self.add_weight(shape=(self.units, self.units),
                                                 name="chain_kernel_otr",
                                                 initializer=self.chain_initializer,
                                                 regularizer=self.chain_regularizer,
                                                 constraint=self.chain_constraint)
         # chain_kernel for emb
-        self.chain_kernel_emb = self.add_weight(shape=(self.units[1], self.units[1]),
+        self.chain_kernel_emb = self.add_weight(shape=(self.units, self.units),
                                                 name="chain_kernel_emb",
                                                 initializer=self.chain_initializer,
                                                 regularizer=self.chain_regularizer,
                                                 constraint=self.chain_constraint)
         # chain_kernel for otr and emb
-        self.chain_kernel_otr_emb = self.add_weight(shape=(self.units[0], self.units[1]),
+        self.chain_kernel_otr_emb = self.add_weight(shape=(self.units, self.units),
                                                     name="chain_kernel_otr_emb",
                                                     initializer=self.chain_initializer,
                                                     regularizer=self.chain_regularizer,
@@ -198,7 +198,7 @@ class FCRF(Layer):
         # self.use_bias = True
         if self.use_bias:
             # shape = (12,) - dtype=float32_ref
-            self.bias = self.add_weight(shape=(sum(self.units),),
+            self.bias = self.add_weight(shape=(self.units,),
                                         name="bias",
                                         initializer=self.bias_initializer,
                                         regularizer=self.bias_regularizer,
@@ -209,13 +209,13 @@ class FCRF(Layer):
         # self.use_boundary = True
         if self.use_boundary:
             # shape = (12,) - dtype=float32_ref
-            self.left_boundary = self.add_weight(shape=(sum(self.units),),
+            self.left_boundary = self.add_weight(shape=(self.units,),
                                                  name="left_boundary",
                                                  initializer=self.boundary_initializer,
                                                  regularizer=self.boundary_regularizer,
                                                  constraint=self.boundary_constraint)
             # shape = (12,) - dtype=float32_ref
-            self.right_boundary = self.add_weight(shape=(sum(self.units),),
+            self.right_boundary = self.add_weight(shape=(self.units,),
                                                   name="right_boundary",
                                                   initializer=self.boundary_initializer,
                                                   regularizer=self.boundary_regularizer,
@@ -277,7 +277,6 @@ class FCRF(Layer):
         self.format_print("self.bias", self.bias)
         self.format_print("(K.dot(X, self.kernel) + self.bias)", K.dot(X, self.kernel) + self.bias)
         # input_energy - E(y,x, features) -> probability(y,x)
-        #
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
         self.format_print("input_energy=activation(K.dot(X, self.kernel) + self.bias)", input_energy)
         if self.use_boundary:
@@ -471,11 +470,11 @@ class FCRF(Layer):
         If "return_logZ=False", compute the Viterbi best path lookup table
         """
         # add all energies
-        # all shapes is (2, 2), where n_otr_tags = n_emb_tags
+        # all shapes is (4, 4), where n_otr_tags = n_emb_tags
         chain_energy_otr = self.chain_kernel_otr
         chain_energy_emb = self.chain_kernel_emb
         chain_energy_otr_emb = self.chain_kernel_otr_emb
-        # expand chain_energy to add this to input_energy
+        # shape=(1, F, F): F=num of tags. 1st F is for t-1, 2nd F for t
         chain_energy_otr = K.expand_dims(chain_energy_otr, 0)
         chain_energy_emb = K.expand_dims(chain_energy_emb, 0)
         chain_energy_otr_emb = K.expand_dims(chain_energy_otr_emb, 0)
