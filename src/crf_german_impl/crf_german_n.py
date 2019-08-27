@@ -88,11 +88,11 @@ sentences = getter.sentences
 words = getter.get_column(0)
 n_words = len(words)
 otr_tags = getter.get_column(1)
+print("otr_tags", otr_tags)
 n_otr_tags = len(otr_tags)
-print("otr_tags_1_column", otr_tags)
-print("n_otr_tags_1_column", n_otr_tags)
-print("emb_tags_2_coulumn", emb_tags)
-print("n_emb_tags_2_coulumn", n_emb_tags)
+emb_tags = getter.get_column(2)
+n_emb_tags = len(emb_tags)
+print("n_emb_tags", emb_tags)
 
 word2idx = {w: i + 2 for i, w in enumerate(words)}
 # unknown words
@@ -111,14 +111,23 @@ X = [[word2idx[w[0]] for w in s] for s in sentences]
 X = pad_sequences(maxlen=MAX_LEN, sequences=X, padding="post", value=word2idx["PAD"])
 
 # convert OTR_Span in sentence to list of tag indexes
-y = [[tag2idx[w[1]] for w in s] for s in sentences]
-y = pad_sequences(maxlen=MAX_LEN, sequences=y, padding="post", value=tag2idx["PAD"])
+y_otr = [[tag2idx[w[1]] for w in s] for s in sentences]
+y_otr = pad_sequences(maxlen=MAX_LEN, sequences=y_otr, padding="post", value=tag2idx["PAD"])
+
+y_emb = [[tag2idx[w[2]] for w in s] for s in sentences]
+y_emb = pad_sequences(maxlen=MAX_LEN, sequences=y_emb, padding="post", value=tag2idx["PAD"])
 
 # one-hot encode
-y = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y]
+# in both cases num_classes need to be equal to n_otr_tags+1
+y_otr = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y_otr]
+y_emb = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y_emb]
 
-X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.1)
-X_tr.shape, X_te.shape, np.array(y_tr).shape, np.array(y_te).shape
+# y = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y]
+
+X_tr, X_te, y_tr_otr, y_te_otr, y_tr_emb, y_te_emb = train_test_split(X, y_otr, y_emb)
+
+# X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.1)
+# X_tr.shape, X_te.shape, np.array(y_tr_otr).shape, np.array(y_te_otr).shape,
 '''
 # parse embeddings to build word as string to their vector representation
 word_vector_model = gensim.models.KeyedVectors.load_word2vec_format("german.model", binary=True)
@@ -139,31 +148,41 @@ for word, i in word2idx.items():
             embedding_matrix[i] = embedding_vector
 '''
 # Model definition
-# input = Input(shape=(MAX_LEN,))
+# input is a "tensor", that will be passed when calling other layers to produce an output
+input = Input(shape=(MAX_LEN,))
 # input_dim = n_word + PAD + UNK - size of the vocabulary
-# model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
+# and calling embedding layer with (input) produces the output tensor model
+model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
+# replace value of model, because this intermediate output is not interesting to keep
 # model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.5))(model)
 # model = TimeDistributed(Dense(50, activation="relu"))(model)
 # CRF Layer = n_otr_tags + PAD
-model = Sequential()
-# input_dim = Input(shape=(MAX_LEN,))
-embeddings = Embedding(input_dim=n_words+2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)
-model.add(embeddings)
-crf = CRF(n_otr_tags + 1)
-model.add(crf)
-#out = crf(model)
-#model = Model(input, out)
+# keep the two different outputs for defining the model
+# crf_otr and crf_emb are called with the same input x, creating a fork
+crf_otr = CRF(n_otr_tags + 1)
+out_otr = crf_otr(model)
+crf_emb = CRF(n_otr_tags+1)
+out_emb = crf_emb(model)
+model = Model(input, [out_otr, out_emb])
 # model.summary()
 # set pre trained weight into embedding layer
 # model.layers[1].set_weights([embedding_matrix])
 # model.layers[1].trainable = False
 # model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
+# loss can be one for both otr and emb or a list with different loss functions for otr and emb
 model.compile("adam", loss=crf_loss, metrics=[crf_viterbi_accuracy])
 model.summary()
-history = model.fit(X_tr, np.array(y_tr), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
+history = model.fit(X_tr, [np.array(y_tr_otr), np.array(y_tr_emb)], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
 # new version
 test_pred = model.predict(X_te, verbose=1)
 
+"""
+model = Sequential()
+embeddings = Embedding(input_dim=n_words+2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)
+model.add(embeddings)
+crf = CRF(n_otr_tags + 1)
+model.add(crf)
+"""
 
 def pred2label(pred):
     # [[[0001][0010]]]
@@ -184,10 +203,10 @@ def pred2label(pred):
     return out
 
 
-pred_labels = pred2label(test_pred)
-test_labels = pred2label(y_te)
-print("F1-score: {:.1%}".format(f1_score(test_labels, pred_labels)))
-print(classification_report(test_labels, pred_labels))
+# pred_labels = pred2label(test_pred)
+# test_labels_otr = pred2label(y_te_otr)
+# print("F1-score: {:.1%}".format(f1_score(test_labels_otr, pred_labels)))
+# print(classification_report(test_labels_otr, pred_labels))
 
 
 

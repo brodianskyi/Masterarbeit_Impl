@@ -194,7 +194,7 @@ class CRF(Layer):
     """
 
     def __init__(self, units,
-                 learn_mode='join',
+                 learn_mode='marginal',
                  test_mode=None,
                  sparse_target=False,
                  use_boundary=True,
