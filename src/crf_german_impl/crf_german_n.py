@@ -7,26 +7,27 @@ from keras.preprocessing.sequence import pad_sequences
 from keras.utils import to_categorical
 from keras.models import Sequential
 from src.crf_german_impl.crf_n import CRF
-#from src.crf_german_impl.crf_impl import CRF
+# from src.crf_german_impl.crf_impl import CRF
 from sklearn.model_selection import train_test_split
 from seqeval.metrics import f1_score, classification_report
 from src.crf_german_impl.crf_loss_n import crf_loss
 from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
+from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy
 
 # number of examples used in each iteration
 BATCH_SIZE = 250
 # number of passes through entire dataset
-EPOCHS = 3
+EPOCHS = 5
 # length of the subsequence
 MAX_LEN = 80
 # dimension of word embedding vector
-EMBEDDING = 50
+EMBEDDING = 300
 
 data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span", "EMB_Span", "Sentence_number"],
                    delimiter="\t",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
 
-data = data.head(300)
+# data = data.head(300)
 print("-------data", data)
 emb_tags = list(set(data["EMB_Span"]))
 print("-----emb_tags", emb_tags)
@@ -154,25 +155,28 @@ input = Input(shape=(MAX_LEN,))
 # and calling embedding layer with (input) produces the output tensor model
 model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
 # replace value of model, because this intermediate output is not interesting to keep
-# model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.5))(model)
-# model = TimeDistributed(Dense(50, activation="relu"))(model)
+model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.5))(model)
+model = TimeDistributed(Dense(50, activation="relu"))(model)
 # CRF Layer = n_otr_tags + PAD
 # keep the two different outputs for defining the model
 # crf_otr and crf_emb are called with the same input x, creating a fork
-crf_otr = CRF(n_otr_tags + 1)
-out_otr = crf_otr(model)
-crf_emb = CRF(n_otr_tags+1)
+# crf_otr = CRF(n_otr_tags + 1)
+# out_otr = crf_otr(model)
+crf_emb = CRF(n_otr_tags + 1)
 out_emb = crf_emb(model)
-model = Model(input, [out_otr, out_emb])
+model = Model(input, out_emb)
+# model = Model(input, [out_otr, out_emb])
 # model.summary()
 # set pre trained weight into embedding layer
 # model.layers[1].set_weights([embedding_matrix])
 # model.layers[1].trainable = False
 # model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
 # loss can be one for both otr and emb or a list with different loss functions for otr and emb
-model.compile("adam", loss=crf_loss, metrics=[crf_viterbi_accuracy])
+model.compile("rmsprop", loss=crf_loss, metrics=[crf_marginal_accuracy])
+# model.compile("adam", loss=crf_loss, metrics=[crf_viterbi_accuracy])
 model.summary()
-history = model.fit(X_tr, [np.array(y_tr_otr), np.array(y_tr_emb)], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
+history = model.fit(X_tr, np.array(y_tr_emb), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
+# history = model.fit(X_tr, [np.array(y_tr_otr), np.array(y_tr_emb)], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
 # new version
 test_pred = model.predict(X_te, verbose=1)
 
@@ -203,10 +207,10 @@ def pred2label(pred):
     return out
 
 
-# pred_labels = pred2label(test_pred)
-# test_labels_otr = pred2label(y_te_otr)
-# print("F1-score: {:.1%}".format(f1_score(test_labels_otr, pred_labels)))
-# print(classification_report(test_labels_otr, pred_labels))
+pred_labels = pred2label(test_pred)
+test_labels_otr = pred2label(y_te_otr)
+print("F1-score: {:.1%}".format(f1_score(test_labels_otr, pred_labels)))
+print(classification_report(test_labels_otr, pred_labels))
 
 
 

@@ -16,7 +16,7 @@ from seqeval.metrics import f1_score, classification_report
 # number of examples used in each iteration
 BATCH_SIZE = 250
 # number of passes through entire dataset
-EPOCHS = 1
+EPOCHS = 5
 # length of the subsequence
 MAX_LEN = 80
 # dimension of word embedding vector
