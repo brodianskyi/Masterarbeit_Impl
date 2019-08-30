@@ -426,7 +426,7 @@ class CRF(Layer):
         logZ = self.recursion(input_energy, mask, return_sequences=False, **kwargs)
         return logZ[:, 0]
 
-    def get_negative_log_likelihood(self, y_true_1, y_true_2, X, mask):
+    def get_negative_log_likelihood(self, y_true_1, X, mask):
         # Computation of the negative log likelihood
         # negative_log_like = -log(1/Z * exp(-E)) = logZ + E
         # shape_of_kernel=(input_dim, units)
@@ -441,10 +441,14 @@ class CRF(Layer):
         self.format_print("energy", energy)
         # input_length = max_seq_length = 5
         logZ = self.get_log_normalization_constant(input_energy, mask, input_length=K.int_shape(X)[1])
+        self.format_print("logZ", logZ)
         nloglik = logZ + energy
+        self.format_print("nloglik", nloglik)
 
         if mask is not None:
+            self.format_print("K.sum(K.cast(mask, K.floatx()), 1)", K.sum(K.cast(mask, K.floatx()), 1))
             nloglik = nloglik / K.sum(K.cast(mask, K.floatx()), 1)
+            self.format_print("nloglik", nloglik)
         else:
             nloglik = nloglik / K.cast(K.shape(X)[1], K.floatx())
 

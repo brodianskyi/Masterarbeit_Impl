@@ -26,7 +26,8 @@ class LayerTest(unittest.TestCase):
         crf.right_boundary = d_src.right_boundary
         # call(X, mask)
         crf.call(d_src.X, d_src.mask)
-        crf_loss(d_src.y_true_1, d_src.y_pred_1, crf)
+        crf_loss(d_src.y_true, d_src.y_pred_1, crf)
+        crf.get_negative_log_likelihood(d_src.y_true, d_src.X, d_src.mask)
         # crf_viterbi_accuracy(d_src.y_true_1, d_src.y_pred_1, crf)
 
     def test_factorial_crf(self):

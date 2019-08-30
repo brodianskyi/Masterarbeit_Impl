@@ -1,6 +1,7 @@
 import src.crf_german_impl.data_source as d_src
 import tensorflow as tf
 
+
 tf.enable_eager_execution()
 
 

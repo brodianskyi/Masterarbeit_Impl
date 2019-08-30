@@ -1,12 +1,31 @@
 from __future__ import print_function
 
 import tensorflow as tf
+from keras import backend as K
 
 tf.enable_eager_execution()
-my_tensor = tf.constant(
-    [[1, 2, 3], [16, 17, 18]]
+X = tf.constant(
+    [
+        [
+            [7, 4, 3],
+            [3, 8, 6],
+            [5, 9, 9],
+            [8, 11, 12],
+            [10, 4, 10]
+        ]
+        ,
+        [
+            [4, 8, 10],
+            [3, 9, 5],
+            [2, 4, 7],
+            [5, 10, 8],
+            [3, 7, 11]
+        ]
+    ]
     , dtype="float32"
 )
+
+print(K.one_hot(X, 4))
 
 
 

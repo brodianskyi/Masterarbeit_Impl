@@ -1,12 +1,14 @@
 import csv
 import numpy as np
 import pandas as pd
-from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional
+from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional, Add
 from keras.models import Model, Input
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils import to_categorical
 from keras.models import Sequential
-from src.crf_german_impl.crf_n import CRF
+# from src.crf_german_impl.crf_n import CRF
+import src.crf_german_impl.crf_n as crf_otr
+import src.crf_german_impl.factorial_crf_impl as crf_emb
 # from src.crf_german_impl.crf_impl import CRF
 from sklearn.model_selection import train_test_split
 from seqeval.metrics import f1_score, classification_report
@@ -17,26 +19,26 @@ from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy
 # number of examples used in each iteration
 BATCH_SIZE = 250
 # number of passes through entire dataset
-EPOCHS = 5
+EPOCHS = 4
 # length of the subsequence
 MAX_LEN = 80
 # dimension of word embedding vector
-EMBEDDING = 300
+EMBEDDING = 250
 
 data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span", "EMB_Span", "Sentence_number"],
                    delimiter="\t",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
 
-# data = data.head(300)
-print("-------data", data)
+data = data.head(300)
+# print("-------data", data)
 emb_tags = list(set(data["EMB_Span"]))
-print("-----emb_tags", emb_tags)
+# print("-----emb_tags", emb_tags)
 otr_tags = list(set(data["OTR_Span"]))
-print("-----otr_tags", otr_tags)
+# print("-----otr_tags", otr_tags)
 n_emb_tags = len(emb_tags)
-print("----n_emb_tags", n_emb_tags)
+# print("----n_emb_tags", n_emb_tags)
 n_otr_tags = len(otr_tags)
-print("----n_otr_tags", n_otr_tags)
+# print("----n_otr_tags", n_otr_tags)
 
 
 class SentenceGetter(object):
@@ -89,11 +91,12 @@ sentences = getter.sentences
 words = getter.get_column(0)
 n_words = len(words)
 otr_tags = getter.get_column(1)
-print("otr_tags", otr_tags)
+# print("otr_tags", otr_tags)
 n_otr_tags = len(otr_tags)
+print("n_otr_tags", n_otr_tags)
 emb_tags = getter.get_column(2)
 n_emb_tags = len(emb_tags)
-print("n_emb_tags", emb_tags)
+print("n_emb_tags", n_emb_tags)
 
 word2idx = {w: i + 2 for i, w in enumerate(words)}
 # unknown words
@@ -160,22 +163,22 @@ model = TimeDistributed(Dense(50, activation="relu"))(model)
 # CRF Layer = n_otr_tags + PAD
 # keep the two different outputs for defining the model
 # crf_otr and crf_emb are called with the same input x, creating a fork
-# crf_otr = CRF(n_otr_tags + 1)
-# out_otr = crf_otr(model)
-crf_emb = CRF(n_otr_tags + 1)
-out_emb = crf_emb(model)
-model = Model(input, out_emb)
-# model = Model(input, [out_otr, out_emb])
+crf_otr = crf_otr.CRF(n_otr_tags + 1)
+out_otr = crf_otr(model)
+crf_emb = crf_emb.CRF(n_otr_tags + 1)
+out_emb = crf_emb([model, out_otr])
+# model = Model(input, out_otr)
+model = Model(input, [out_otr, out_emb])
 # model.summary()
 # set pre trained weight into embedding layer
 # model.layers[1].set_weights([embedding_matrix])
 # model.layers[1].trainable = False
 # model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
 # loss can be one for both otr and emb or a list with different loss functions for otr and emb
-model.compile("rmsprop", loss=crf_loss, metrics=[crf_marginal_accuracy])
+model.compile("rmsprop", loss=crf_loss, metrics={'out_otr': 'crf_marginal_accuracy', 'out_emb': 'crf_viterbi_accuracy'})
 # model.compile("adam", loss=crf_loss, metrics=[crf_viterbi_accuracy])
 model.summary()
-history = model.fit(X_tr, np.array(y_tr_emb), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
+history = model.fit(X_tr, [np.array(y_tr_otr), np.array(y_tr_emb)], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
 # history = model.fit(X_tr, [np.array(y_tr_otr), np.array(y_tr_emb)], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
 # new version
 test_pred = model.predict(X_te, verbose=1)
@@ -207,10 +210,10 @@ def pred2label(pred):
     return out
 
 
-pred_labels = pred2label(test_pred)
-test_labels_otr = pred2label(y_te_otr)
-print("F1-score: {:.1%}".format(f1_score(test_labels_otr, pred_labels)))
-print(classification_report(test_labels_otr, pred_labels))
+# pred_labels = pred2label(test_pred)
+# test_labels_otr = pred2label(y_tr_otr)
+# print("F1-score: {:.1%}".format(f1_score(test_labels_otr, pred_labels)))
+# print(classification_report(test_labels_otr, pred_labels))
 
 
 

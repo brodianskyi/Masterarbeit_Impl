@@ -1,5 +1,8 @@
-import keras
-import tensorflow as tf
+from __future__ import absolute_import
+from __future__ import division
+
+import warnings
+
 from keras import activations
 from keras import backend as K
 from keras import constraints
@@ -9,247 +12,301 @@ from keras.layers import InputSpec
 from keras.layers import Layer
 from keras_contrib.utils.test_utils import to_tuple
 
-import src.crf_german_impl.data_source as data_src
+from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy
+from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
+from src.crf_german_impl.crf_loss_n import crf_loss
+import tensorflow as tf
 
 
-class FCRF(Layer):
-    tf.enable_eager_execution()
-    """
-    !!!!!! KERAS_VERSION = "2.2.3" !!!!!!!
-    Learn_Mode either "join" or "marginal"
-    "loses.crf_nll" for "join" and
-    "losses.categorical_crossentropy" or "losses.sparse_categorical_crossentropy" for "marginal" mode
-    for convenience will be used "losses.crf_loss"
-    -----------------------------
-    Test_Mode either "Viterbi" or "Marginal"
-    if "marginal mode" is used for learn_mode then "Marginal" - Test mode
-    if "join" is used for learn_mode then "Viterby" - Test mode
-    -----------------------------
-    Sparse_Target - if "True" - labels are one-hot encoded Else - indices
-    -----------------------------
-    self.supports_masking = True -> Masking allows to handle variable length inputs,
-    like padding with 0 all inputs sequences to the same length
-    -----------------------------
-    Use_Boundary = True - add start-end chain energies
-    CRF function = energie function = E(y|x) = f(y,x)+f(y1,yi+1,x) -> Unary + pairwise potentials
-    ------------------------------
-    Use Bias -  whether the layer uses a bias vector, bias is additional units in the each layer allows to shift the
-    activation function to the left or right
-    ------------------------------
-    Activation - activation function to use
-    activation = linear -> y=kx
-    activation is y=sum(weight*input)+bias
-    -------------------------------
-    --------Initializers-----------
-    Kernel_Initializer - initialize for the "kernel" weights matrix
-    used for linear transformation of the inputs
-    -------------------------------
-    Chain_Initializer - initialize "chain_kernel" weights matrix,
-    used for CRF chain energy
-    ------------------------------
-    Bias_Initializer - Initializer for the bias vector
-    ------------------------------
-    Boundary_initializer - initializer for "left_boundary", "right_boundary"
-    -----------------------------
-    ---------Regularizers---------
-    Kernel_regularizer - regularize for the "kernel" weights matrix
-    ------------------------------
-    Chain_regularizer - regularize "chain kernel" matrix, used for CRF chain energy
-    ------------------------------
-    Bias_regularizer - regularize function applied to the bias vector
-    ------------------------------
-    Boundary_regularizer - regularize function applied to the "left_boundary", "right_boundary"
-    ------------------------------
-    -----------Constrains----------
-    Kernel_constrains - constraint function applied to "kernel"(linear transformation of the inputs) matrix
-    ------------------------------
-    Chain_constrains -  constraint function applied to "CRF chain energy"
-    -----------------------------
-    Bias_constrains - constraint function applied to the bias vector
-    -----------------------------
-    Boundary_constrains - constraint function applied to the "left_boundary", "right_boundary",
-    add start-end chain energies
-    ----------------------------
-    ----------------------------
-    Input_dim - input_shape, required when using the layer as the first layer in a model
-    ----------------------------
-    Unroll -  Unrolling can speed up a RNN, although it tends to be more memory-intensive
-    Unrolling is only suitable for short sequences
-    If false (by default) - symbolic loop will be used
+class CRF(Layer):
+    """An implementation of linear chain conditional random field (CRF).
+
+    An linear chain CRF is defined to maximize the following likelihood function:
+
+    $$ L(W, U, b; y_1, ..., y_n) := \frac{1}{Z}
+    \sum_{y_1, ..., y_n} \exp(-a_1' y_1 - a_n' y_n
+        - \sum_{k=1^n}((f(x_k' W + b) y_k) + y_1' U y_2)), $$
+
+    where:
+        $Z$: normalization constant
+        $x_k, y_k$:  inputs and outputs
+
+    This implementation has two modes for optimization:
+    1. (`join mode`) optimized by maximizing join likelihood,
+    which is optimal in theory of statistics.
+       Note that in this case, CRF must be the output/last layer.
+    2. (`marginal mode`) return marginal probabilities on each time
+    step and optimized via composition
+       likelihood (product of marginal likelihood), i.e.,
+       using `categorical_crossentropy` loss.
+       Note that in this case, CRF can be either the last layer or an
+       intermediate layer (though not explored).
+
+    For prediction (test phrase), one can choose either Viterbi
+    best path (class indices) or marginal
+    probabilities if probabilities are needed.
+    However, if one chooses *join mode* for training,
+    Viterbi output is typically better than marginal output,
+    but the marginal output will still perform
+    reasonably close, while if *marginal mode* is used for training,
+    marginal output usually performs
+    much better. The default behavior and `metrics.crf_accuracy`
+    is set according to this observation.
+
+    In addition, this implementation supports masking and accepts either
+    onehot or sparse target.
+
+    If you open a issue or a pull request about CRF, please
+    add 'cc @lzfelix' to notify Luiz Felix.
+
+
+    # Examples
+
+    ```python
+        from keras_contrib.layers import CRF
+        from keras_contrib.losses import crf_loss
+        from keras_contrib.metrics import crf_viterbi_accuracy
+
+        model = Sequential()
+        model.add(Embedding(3001, 300, mask_zero=True)(X)
+
+        # use learn_mode = 'join', test_mode = 'viterbi',
+        # sparse_target = True (label indice output)
+        crf = CRF(10, sparse_target=True)
+        model.add(crf)
+
+        # crf_accuracy is default to Viterbi acc if using join-mode (default).
+        # One can add crf.marginal_acc if interested, but may slow down learning
+        model.compile('adam', loss=crf_loss, metrics=[crf_viterbi_accuracy])
+
+        # y must be label indices (with shape 1 at dim 3) here,
+        # since `sparse_target=True`
+        model.fit(x, y)
+
+        # prediction give onehot representation of Viterbi best path
+        y_hat = model.predict(x_test)
+    ```
+
+    The following snippet shows how to load a persisted
+    model that uses the CRF layer:
+
+    ```python
+        from keras.models import load_model
+        from keras_contrib.losses import import crf_loss
+        from keras_contrib.metrics import crf_viterbi_accuracy
+
+        custom_objects={'CRF': CRF,
+                        'crf_loss': crf_loss,
+                        'crf_viterbi_accuracy': crf_viterbi_accuracy}
+
+        loaded_model = load_model('<path_to_model>',
+                                  custom_objects=custom_objects)
+    ```
+
+    # Arguments
+        units: Positive integer, dimensionality of the output space.
+        learn_mode: Either 'join' or 'marginal'.
+            The former train the model by maximizing join likelihood while the latter
+            maximize the product of marginal likelihood over all time steps.
+            One should use `losses.crf_nll` for 'join' mode
+            and `losses.categorical_crossentropy` or
+            `losses.sparse_categorical_crossentropy` for
+            `marginal` mode.  For convenience, simply
+            use `losses.crf_loss`, which will decide the proper loss as described.
+        test_mode: Either 'viterbi' or 'marginal'.
+            The former is recommended and as default when `learn_mode = 'join'` and
+            gives one-hot representation of the best path at test (prediction) time,
+            while the latter is recommended and chosen as default
+            when `learn_mode = 'marginal'`,
+            which produces marginal probabilities for each time step.
+            For evaluating metrics, one should
+            use `metrics.crf_viterbi_accuracy` for 'viterbi' mode and
+            'metrics.crf_marginal_accuracy' for 'marginal' mode, or
+            simply use `metrics.crf_accuracy` for
+            both which automatically decides it as described.
+            One can also use both for evaluation at training.
+        sparse_target: Boolean (default False) indicating
+            if provided labels are one-hot or
+            indices (with shape 1 at dim 3).
+        use_boundary: Boolean (default True) indicating if trainable
+            start-end chain energies
+            should be added to model.
+        use_bias: Boolean, whether the layer uses a bias vector.
+        kernel_initializer: Initializer for the `kernel` weights matrix,
+            used for the linear transformation of the inputs.
+            (see [initializers](../initializers.md)).
+        chain_initializer: Initializer for the `chain_kernel` weights matrix,
+            used for the CRF chain energy.
+            (see [initializers](../initializers.md)).
+        boundary_initializer: Initializer for the `left_boundary`,
+            'right_boundary' weights vectors,
+            used for the start/left and end/right boundary energy.
+            (see [initializers](../initializers.md)).
+        bias_initializer: Initializer for the bias vector
+            (see [initializers](../initializers.md)).
+        activation: Activation function to use
+            (see [activations](../activations.md)).
+            If you pass None, no activation is applied
+            (ie. "linear" activation: `a(x) = x`).
+        kernel_regularizer: Regularizer function applied to
+            the `kernel` weights matrix
+            (see [regularizer](../regularizers.md)).
+        chain_regularizer: Regularizer function applied to
+            the `chain_kernel` weights matrix
+            (see [regularizer](../regularizers.md)).
+        boundary_regularizer: Regularizer function applied to
+            the 'left_boundary', 'right_boundary' weight vectors
+            (see [regularizer](../regularizers.md)).
+        bias_regularizer: Regularizer function applied to the bias vector
+            (see [regularizer](../regularizers.md)).
+        kernel_constraint: Constraint function applied to
+            the `kernel` weights matrix
+            (see [constraints](../constraints.md)).
+        chain_constraint: Constraint function applied to
+            the `chain_kernel` weights matrix
+            (see [constraints](../constraints.md)).
+        boundary_constraint: Constraint function applied to
+            the `left_boundary`, `right_boundary` weights vectors
+            (see [constraints](../constraints.md)).
+        bias_constraint: Constraint function applied to the bias vector
+            (see [constraints](../constraints.md)).
+        input_dim: dimensionality of the input (integer).
+            This argument (or alternatively, the keyword argument `input_shape`)
+            is required when using this layer as the first layer in a model.
+        unroll: Boolean (default False). If True, the network will be
+            unrolled, else a symbolic loop will be used.
+            Unrolling can speed-up a RNN, although it tends
+            to be more memory-intensive.
+            Unrolling is only suitable for short sequences.
+
+    # Input shape
+        3D tensor with shape `(nb_samples, timesteps, input_dim)`.
+
+    # Output shape
+        3D tensor with shape `(nb_samples, timesteps, units)`.
+
+    # Masking
+        This layer supports masking for input data with a variable number
+        of timesteps. To introduce masks to your data,
+        use an [Embedding](embeddings.md) layer with the `mask_zero` parameter
+        set to `True`.
+
     """
 
     def __init__(self, units,
-                 learn_mode="join",
+                 learn_mode='join',
                  test_mode=None,
                  sparse_target=False,
                  use_boundary=True,
                  use_bias=True,
-                 activation="linear",
-                 kernel_initializer="glorot_uniform",
-                 chain_initializer="orthogonal",
-                 bias_initializer="zeros",
-                 boundary_initializer="zeros",
+                 activation='linear',
+                 kernel_initializer='glorot_uniform',
+                 chain_initializer='orthogonal',
+                 bias_initializer='zeros',
+                 boundary_initializer='zeros',
                  kernel_regularizer=None,
                  chain_regularizer=None,
-                 bias_regularizer=None,
                  boundary_regularizer=None,
+                 bias_regularizer=None,
                  kernel_constraint=None,
                  chain_constraint=None,
-                 bias_constraint=None,
                  boundary_constraint=None,
+                 bias_constraint=None,
                  input_dim=None,
                  unroll=False,
                  **kwargs):
-        super(FCRF, self).__init__(**kwargs)
-        # self.inter_ses = tf.InteractiveSession()
-        # -!!!self.oldStdout = sys.stdout
-        # -!!!self.output_file = open("output.txt", "w")
+        super(CRF, self).__init__(**kwargs)
         self.supports_masking = True
-        # units = n_otr_tags + 1 = 12
         self.units = units
-        # learn_mode = "join"
         self.learn_mode = learn_mode
-        assert self.learn_mode in ["join", "marginal"]
+        assert self.learn_mode in ['join', 'marginal']
         self.test_mode = test_mode
-
         if self.test_mode is None:
-            self.test_mode = "viterbi" if self.learn_mode == "join" else "marginal"
+            self.test_mode = 'viterbi' if self.learn_mode == 'join' else 'marginal'
         else:
-            assert self.test_mode in ["viterbi", "marginal"]
-        # test_mode = "viterbi"; learn_mode = "join"
+            assert self.test_mode in ['viterbi', 'marginal']
         self.sparse_target = sparse_target
         self.use_boundary = use_boundary
         self.use_bias = use_bias
 
-        # activation = linear
         self.activation = activations.get(activation)
-        # kernel_initializers = "glorot_uniform"
+
         self.kernel_initializer = initializers.get(kernel_initializer)
-        # chain_initializer = "orthogonal"
         self.chain_initializer = initializers.get(chain_initializer)
-        # boundary_initializer = "zeros"
         self.boundary_initializer = initializers.get(boundary_initializer)
-        # bias_initializer = "zeros"
         self.bias_initializer = initializers.get(bias_initializer)
-        # "None" for all
+
         self.kernel_regularizer = regularizers.get(kernel_regularizer)
         self.chain_regularizer = regularizers.get(chain_regularizer)
         self.boundary_regularizer = regularizers.get(boundary_regularizer)
         self.bias_regularizer = regularizers.get(bias_regularizer)
-        # "None" for all
+
         self.kernel_constraint = constraints.get(kernel_constraint)
         self.chain_constraint = constraints.get(chain_constraint)
         self.boundary_constraint = constraints.get(boundary_constraint)
         self.bias_constraint = constraints.get(bias_constraint)
-        # unroll = "False"
+
         self.unroll = unroll
 
     def build(self, input_shape):
-        """
-        Create the layer weights
-        """
-        # input_shape =<class tuple> (None, 80, 50)
-        # fix an inconsistency between "keras" and "tensorflow.keras"
-        # if tf.keras -> input_shape is tuple with "Dimensions" objects
-        # if keras -> input_shape is tuple of ints or "None"
-        # keras.__name__ = keras
-        print("---Used version of keras = ", keras.__name__)
-        # keras -> input_shape do not change
-        # input_shape = dt_src.input_shape
-        input_shape = to_tuple(input_shape)
-        # input_shape = output from Enbedding layer (batch_size, max_seq_len, embedding_dim)
-        # input_shape = <class tuple>(None, 80, 50) -> (None, MAX_LEN = 80, Units_lstm = 50)
-        # InputSpec - specifies the input_dim of every input to a layer
-        # self.input_spec is defined in keras.layers.Layer
-        # input_spec = <class "list">[InputSpec(shape=(None, 80, 50), ndim=3]
-        # "rank" oder "n_dim" of the input -> e. g. for shape(3,3,4) rank = 3 -> 3 dimensional vector
-        self.input_spec = [InputSpec(shape=input_shape)]
-        # self.input_dim initialized in __init__
-        # self.input_dim = 50
-        # input_dim = embedding_dim
-        self.input_dim = input_shape[-1]
-        # initialize kernel_weights_matrix(linear transformation of the inputs)
-        # shape = (input_dim, units_crf=n_tags+1) = (50, 12) dtype=float32_ref
+        # input_shape = to_tuple(input_shape)
+        # input_shape = [out_otr, out_emb]
+        assert isinstance(input_shape, list)
+        self.input_spec = [InputSpec(shape=input_shape[0]), InputSpec(shape=input_shape[1])]
+        # input_dim = 50(from TimeDistributed)
+        self.input_dim = input_shape[0][-1]
+
         self.kernel = self.add_weight(shape=(self.input_dim, self.units),
-                                      name="kernel",
+                                      name='kernel',
                                       initializer=self.kernel_initializer,
                                       regularizer=self.kernel_regularizer,
                                       constraint=self.kernel_constraint)
-        # initialize chain_weights_matrices, used for FCRF chain energy functions
-        # chain_kernel for otr
-        self.chain_kernel_otr = self.add_weight(shape=(self.units, self.units),
-                                                name="chain_kernel_otr",
-                                                initializer=self.chain_initializer,
-                                                regularizer=self.chain_regularizer,
-                                                constraint=self.chain_constraint)
-        # chain_kernel for emb
-        self.chain_kernel_emb = self.add_weight(shape=(self.units, self.units),
-                                                name="chain_kernel_emb",
-                                                initializer=self.chain_initializer,
-                                                regularizer=self.chain_regularizer,
-                                                constraint=self.chain_constraint)
-        # chain_kernel for otr and emb
-        self.chain_kernel_otr_emb = self.add_weight(shape=(self.units, self.units),
-                                                    name="chain_kernel_otr_emb",
-                                                    initializer=self.chain_initializer,
-                                                    regularizer=self.chain_regularizer,
-                                                    constraint=self.chain_constraint)
-
-        # self.use_bias = True
+        self.chain_kernel = self.add_weight(shape=(self.units, self.units),
+                                            name='chain_kernel',
+                                            initializer=self.chain_initializer,
+                                            regularizer=self.chain_regularizer,
+                                            constraint=self.chain_constraint)
         if self.use_bias:
-            # shape = (12,) - dtype=float32_ref
             self.bias = self.add_weight(shape=(self.units,),
-                                        name="bias",
+                                        name='bias',
                                         initializer=self.bias_initializer,
                                         regularizer=self.bias_regularizer,
                                         constraint=self.bias_constraint)
         else:
             self.bias = 0
 
-        # self.use_boundary = True
         if self.use_boundary:
-            # shape = (12,) - dtype=float32_ref
             self.left_boundary = self.add_weight(shape=(self.units,),
-                                                 name="left_boundary",
+                                                 name='left_boundary',
                                                  initializer=self.boundary_initializer,
                                                  regularizer=self.boundary_regularizer,
                                                  constraint=self.boundary_constraint)
-            # shape = (12,) - dtype=float32_ref
             self.right_boundary = self.add_weight(shape=(self.units,),
-                                                  name="right_boundary",
+                                                  name='right_boundary',
                                                   initializer=self.boundary_initializer,
                                                   regularizer=self.boundary_regularizer,
                                                   constraint=self.boundary_constraint)
-        # This method must set self.built = True at the end
         self.built = True
-        # then go to the method call
 
     def call(self, X, mask=None):
-        """
-        Layer logic implementation (learning_mode/test_mode)
-        """
-        # input_shape(from def build) = <class tuple>(None, 80, 50)
-        # X = <Tensor, shape=(?,80,50), dtype=float32>
-        # Input mask to CRF must have dim=2 if not None
-        # mask<embedding> = shape=(?,80), dtype=bool>
-        if mask is not None:
-            assert K.ndim(mask) == 2
+        assert isinstance(X, list)
+        print("mask", mask)
+        out_from_distr, out_from_1crf = X
+        print("out_from_distr", out_from_distr, "out_from_1crf", out_from_1crf)
+        # if mask is not None:
+        #    assert K.ndim(mask) == 2, 'Input mask to CRF must have dim 2 if not None'
 
-        # test_mode = "viterbi"; learn_mode = "join"
-        if self.test_mode == "viterbi":
-            test_output = self.viterbi_decoding(X, mask)
+        if self.test_mode == 'viterbi':
+            test_output = self.viterbi_decoding(X[0], mask)
         else:
-            test_output = self.get_marginal_prob(X, mask)
+            test_output = self.get_marginal_prob(X[0], mask)
 
         self.uses_learning_phase = True
-        if self.learn_mode == "join":
-            # K.zeros_like - initilize a tensor of given shape with zeros
-            # K.dot multiplies two tesor
-            # train_output = <Tensor/zeros_like:0, shape=(?,80,12),dtype=float32>
+        if self.learn_mode == 'join':
             train_output = K.zeros_like(K.dot(X, self.kernel))
             out = K.in_train_phase(train_output, test_output)
         else:
-            if self.test_mode == "viterbi":
+            if self.test_mode == 'viterbi':
                 train_output = self.get_marginal_prob(X, mask)
                 out = K.in_train_phase(train_output, test_output)
             else:
@@ -257,365 +314,296 @@ class FCRF(Layer):
         return out
 
     def compute_output_shape(self, input_shape):
-        # modify the shape of input
         return input_shape[:2] + (self.units,)
 
-    def viterbi_decoding(self, X, mask=None):
-        print("------Viterby_decoding------")
-        # X = <Tensor, shape=(?,80,50), dtype=float32>
-        # mask = shape=(?,80), dtype=bool>
-        # self.kernel= (input_dim, units_crf=n_tags+1) = (50, 12)- dtype=float32_ref (linear transform of the input)
-        # self.bias.shape = (12,); dtype=float32_ref
-        # ! activation=linear=kx+b ! - K.dot - multiplication of two tensor
-        # ! input_energy = activation((X*self.kernel) + self.bias) = activation(kx+b)
-        # input_energy shape=(?,80,12); dtype=float32
-        # activation(K.dot( X=(?,80,50)_dtype=float32 * kernel(50, 12)- dtype=float32) + bias(12,); dtype=float32)=(?,80,12)_dtype=float32
-        # -!!! sys.stdout = self.output_file
-        self.format_print("X", X)
-        self.format_print("self.kernel", self.kernel)
-        self.format_print("K.dot(X, kernel)", K.dot(X, self.kernel))
-        self.format_print("self.bias", self.bias)
-        self.format_print("(K.dot(X, self.kernel) + self.bias)", K.dot(X, self.kernel) + self.bias)
-        # input_energy - E(y,x, features) -> probability(y,x)
-        input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
-        self.format_print("input_energy=activation(K.dot(X, self.kernel) + self.bias)", input_energy)
-        if self.use_boundary:
-            # input_energy - (?, 80, 12) float32
-            input_energy = self.add_boundary_energy(
-                input_energy, mask, self.left_boundary, self.right_boundary)
-        self.format_print("input_energy add boundary energy", input_energy)
-        argmin_tables = self.recursion(input_energy, mask, return_logZ=False)
-        # argmin_tables = data_src.argmin_table
-        self.format_print("argmin_tables = self.recursion", argmin_tables)
-        argmin_tables = K.cast(argmin_tables, "int32")
-        self.format_print("K.cast(argmin_tables, int32); argmin_tables", argmin_tables)
+    def compute_mask(self, input, mask=None):
+        if mask is not None and self.learn_mode == 'join':
+            return K.any(mask, axis=1)
+        return mask
 
-        # backwards to find best path
-        argmin_tables = K.reverse(argmin_tables, 1)
-        # matrix instead of vector trquired by tf "K.rnn"
-        self.format_print("argmin_tables after reverse", argmin_tables)
-        initial_best_idx = [K.expand_dims(argmin_tables[:, 0, 0])]
-        self.format_print("initial_best_idx", initial_best_idx)
-        if K.backend() == "theano":
-            from theano import tensor as T
-            initial_best_idx = [T.unbroadcast(initial_best_idx[0], 1)]
+    def get_config(self):
+        config = {
+            'units': self.units,
+            'learn_mode': self.learn_mode,
+            'test_mode': self.test_mode,
+            'use_boundary': self.use_boundary,
+            'use_bias': self.use_bias,
+            'sparse_target': self.sparse_target,
+            'kernel_initializer': initializers.serialize(self.kernel_initializer),
+            'chain_initializer': initializers.serialize(self.chain_initializer),
+            'boundary_initializer': initializers.serialize(
+                self.boundary_initializer),
+            'bias_initializer': initializers.serialize(self.bias_initializer),
+            'activation': activations.serialize(self.activation),
+            'kernel_regularizer': regularizers.serialize(self.kernel_regularizer),
+            'chain_regularizer': regularizers.serialize(self.chain_regularizer),
+            'boundary_regularizer': regularizers.serialize(
+                self.boundary_regularizer),
+            'bias_regularizer': regularizers.serialize(self.bias_regularizer),
+            'kernel_constraint': constraints.serialize(self.kernel_constraint),
+            'chain_constraint': constraints.serialize(self.chain_constraint),
+            'boundary_constraint': constraints.serialize(self.boundary_constraint),
+            'bias_constraint': constraints.serialize(self.bias_constraint),
+            'input_dim': self.input_dim,
+            'unroll': self.unroll}
+        base_config = super(CRF, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
 
-        print("input_length=", K.int_shape(X)[1], "unroll=", self.unroll)
+    @property
+    def loss_function(self):
+        warnings.warn('CRF.loss_function is deprecated '
+                      'and it might be removed in the future. Please '
+                      'use losses.crf_loss instead.')
+        return crf_loss
 
-        def gather_each_row(params, indices):
-            self.format_print("params", params)
-            self.format_print("indices", indices)
-            n = K.shape(indices)[0]
-            print("shape(indices)", n)
-            if K.backend() == "theano":
-                from theano import tensor as T
-                return params[T.arange(n), indices]
-            elif K.backend() == "tensorflow":
-                self.format_print("[tf.range(n", tf.range(n))
-                self.format_print("K.stack", K.stack([tf.range(n), indices]))
-                indices = K.transpose(K.stack([tf.range(n), indices]))
-                self.format_print("indices after transpose", indices)
-                self.format_print("tf.gather_nd", tf.gather_nd(params, indices))
-                return tf.gather_nd(params, indices)
-            else:
-                raise NotImplementedError
+    @property
+    def accuracy(self):
+        warnings.warn('CRF.accuracy is deprecated and it '
+                      'might be removed in the future. Please '
+                      'use metrics.crf_accuracy')
+        if self.test_mode == 'viterbi':
+            return crf_viterbi_accuracy
+        else:
+            return crf_marginal_accuracy
 
-        def find_path(argmin_table, best_idx):
-            self.format_print("argmin_table in find_path", argmin_table)
-            self.format_print("best_idx in find_path", best_idx)
-            next_best_idx = gather_each_row(argmin_table, best_idx[0][:, 0])
-            self.format_print("next_best_idx", next_best_idx)
-            next_best_idx = K.expand_dims(next_best_idx)
-            self.format_print("next_best_idx expand", next_best_idx)
-            if K.backend() == "theano":
-                from theano import tensor as T
-                next_best_idx = T.unbroadcast(next_best_idx, 1)
-            print("return find_path()", next_best_idx, [next_best_idx])
-            return next_best_idx, [next_best_idx]
+    @property
+    def viterbi_acc(self):
+        warnings.warn('CRF.viterbi_acc is deprecated and it might '
+                      'be removed in the future. Please '
+                      'use metrics.viterbi_acc instead.')
+        return crf_viterbi_accuracy
 
-        _, best_paths, _ = K.rnn(find_path, argmin_tables, initial_best_idx,
-                                 input_length=K.int_shape(X)[1], unroll=self.unroll)
-        self.format_print("best_path_before_reverse", best_paths)
-        best_paths = K.reverse(best_paths, 1)
-        self.format_print("best_path_reverse", best_paths)
-        best_paths = K.squeeze(best_paths, 2)
-        self.format_print("best_path_squeeze", best_paths)
-        # units ???? which number of tags should be
-        self.format_print("K.one_hot", K.one_hot(best_paths, 4))
+    @property
+    def marginal_acc(self):
+        warnings.warn('CRF.moarginal_acc is deprecated and it '
+                      'might be removed in the future. Please '
+                      'use metrics.marginal_acc instead.')
+        return crf_marginal_accuracy
 
-        return K.one_hot(best_paths, 4)
+    @staticmethod
+    def softmaxNd(x, axis=-1):
+        m = K.max(x, axis=axis, keepdims=True)
+        exp_x = K.exp(x - m)
+        prob_x = exp_x / K.sum(exp_x, axis=axis, keepdims=True)
+        return prob_x
+
+    @staticmethod
+    def shift_left(x, offset=1):
+        assert offset > 0
+        return K.concatenate([x[:, offset:], K.zeros_like(x[:, :offset])], axis=1)
+
+    @staticmethod
+    def shift_right(x, offset=1):
+        assert offset > 0
+        return K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)
 
     def add_boundary_energy(self, energy, mask, start, end):
-        # energy = activation((X*self.kernel) + self.bias) ->(?, 80, 12)
-        # mask =  <shape=(?,80), dtype=bool>
-        # start =  self.left_boundary -> (12,) float32
-        # end = self.right_boundary -> (12,) float32
-        # expand_dims(tensor, axis=0)
-        # axis: Position where to add a new axis to the tensor
-        # start_old_shape=(12,) -> expand_dims -> start_expand_shape=(1,1,12); dtype=float32
-        self.format_print("start before expand", start)
         start = K.expand_dims(K.expand_dims(start, 0), 0)
-        self.format_print("start after expand = left_boundary; start", start)
-        # end_old_shape=(12,) -> expand_dims -> end_expand_shape=(1,1,12); dtype=float32
-        self.format_print("end_before expand", end)
         end = K.expand_dims(K.expand_dims(end, 0), 0)
-        self.format_print("end after expand=right_boundary; end", end)
-
         if mask is None:
-            energy = K.concatenate([energy[:, :1, :] + start, energy[:, 1:, :]], axis=1)
-            energy = K.concatenate([energy[:, :-1, :], energy[:, -1:, :] + end], axis=1)
+            energy = K.concatenate([energy[:, :1, :] + start, energy[:, 1:, :]],
+                                   axis=1)
+            energy = K.concatenate([energy[:, :-1, :], energy[:, -1:, :] + end],
+                                   axis=1)
         else:
-            # we have a mask value
-            # cast - convert a tesnsor-variable value from one type to another
-            # cast -> bool to float32
-            # expand_dims from (?,80) to -> mask<embedding> = (?,80,1)
-            self.format_print("mask", mask)
             mask = K.expand_dims(K.cast(mask, K.floatx()))
-            self.format_print("mask after expand", mask)
-            # K.greater(x,y) - Element-wise compare value of (x,y)
-            # (x > y) -> (IF mask[i] > shift_right(mask)[i] -> True)
-            # K.greater returns -> ["True", "False",...] bool tensor with the same shape as mask=shift_right_mask
-            # start_mask(?,80,1) return a tensor from bool to float -> ["True", "False",..] -> [1. 0.]
-            self.format_print("K.greater(mask, shift_right_mask)",
-                              K.greater(mask, self.shift_right(mask)))
             start_mask = K.cast(K.greater(mask, self.shift_right(mask)), K.floatx())
-            self.format_print("start_mask", start_mask)
-            # do the same for the left shift
-            # end_mask(?,80,1) return a tensor form bool to float -> ["True", "False"] -> [1. 0.]
-            self.format_print("K.greater(shift_left_mask, mask)",
-                              K.greater(self.shift_left(mask), mask))
             end_mask = K.cast(K.greater(self.shift_left(mask), mask), K.floatx())
-            self.format_print("end_mask", end_mask)
-            # energy = input_energy = activation; start = left_boundary; end = right_boundary
-            self.format_print("start_mask * start", start_mask * start)
             energy = energy + start_mask * start
-            self.format_print("energy + start_mask * start", energy)
             energy = energy + end_mask * end
-            self.format_print("end_mask * end", end_mask * end)
-            self.format_print("final_energy = input_energy * start_mask * start + end_mask * end", energy)
         return energy
 
-    def get_energy(self, y_true, input_energy, mask):
-        # B = batch_size(2), T = max_seq_len = 5
-        self.format_print("y_true", y_true)
-        self.format_print("input_energy", input_energy)
-        self.format_print("mask", mask)
-        self.format_print("input_energy * y_true", input_energy * y_true)
-        input_energy = K.sum(input_energy * y_true, 2)  # (B, T)
-        self.format_print("input_energy", input_energy)
-        # (B, T-1)
-        self.format_print("y_true[:, :-1, :]", y_true[:, :-1, :])
-        self.format_print("self.chain_kernel", self.chain_kernel)
-        self.format_print("K.dot", K.dot(y_true[:, :-1, :], self.chain_kernel))
-        self.format_print("y_true[:, 1:, :]", y_true[:, 1:, :])
-        self.format_print("K.dot * y_true", K.dot(y_true[:, :-1, :], self.chain_kernel) * y_true[:, 1:, :])
-        #
-        chain_energy = K.sum(K.dot(y_true[:, :-1, :], self.chain_kernel) * y_true[:, 1:, :], 2)
-        self.format_print("chain_energy", chain_energy)
-        if mask is not None:
-            mask = K.cast(mask, K.floatx())
-            # (B, T-1), mask[:, :-1]*mask[:,1:] makes it work with any padding
-            self.format_print("mask", mask)
-            self.format_print("mask[:, :-1]", mask[:, :-1])
-            self.format_print("mask[:, 1:]", mask[:, 1:])
-            chain_mask = mask[:, :-1] * mask[:, 1:]
-            self.format_print("chain_mask", chain_mask)
-            input_energy = input_energy * mask
-            self.format_print("input_energy", input_energy)
-            chain_energy = chain_energy * chain_mask
-            self.format_print("chain_energy", chain_energy)
-        self.format_print("K.sum(input_energy, -1)", K.sum(input_energy, -1))
-        self.format_print("K.sum(chain_energy, -1)", K.sum(chain_energy, -1))
-        total_energy = K.sum(input_energy, -1) + K.sum(chain_energy, -1)  # (B, )
-        self.format_print("total_energy", total_energy)
-
-        return total_energy
-
     def get_log_normalization_constant(self, input_energy, mask, **kwargs):
-        # compute logarithm of normalization constant Z, where
-        # Z = sum exp(-E) -> logZ = log sum exp(-E) = -nlogZ
+        """Compute logarithm of the normalization constant Z, where
+        Z = sum exp(-E) -> logZ = log sum exp(-E) =: -nlogZ
+        """
         # should have logZ[:, i] == logZ[:, j] for any i, j
         logZ = self.recursion(input_energy, mask, return_sequences=False, **kwargs)
         return logZ[:, 0]
 
-    def get_negative_log_likelihood(self, y_true_1, X, mask):
-        # Computation of the negative log likelihood
-        # negative_log_like = -log(1/Z * exp(-E)) = logZ + E
-        # shape_of_kernel=(input_dim, units)
+    def get_energy(self, y_true, input_energy, mask):
+        """Energy = a1' y1 + u1' y1 + y1' U y2 + u2' y2 + y2' U y3 + u3' y3 + an' y3
+        """
+        input_energy = K.sum(input_energy * y_true, 2)  # (B, T)
+        # (B, T-1)
+        chain_energy = K.sum(K.dot(y_true[:, :-1, :],
+                                   self.chain_kernel) * y_true[:, 1:, :], 2)
+
+        if mask is not None:
+            mask = K.cast(mask, K.floatx())
+            # (B, T-1), mask[:,:-1]*mask[:,1:] makes it work with any padding
+            chain_mask = mask[:, :-1] * mask[:, 1:]
+            input_energy = input_energy * mask
+            chain_energy = chain_energy * chain_mask
+        total_energy = K.sum(input_energy, -1) + K.sum(chain_energy, -1)  # (B, )
+
+        return total_energy
+
+    def get_negative_log_likelihood(self, y_true, X, mask):
+        """Compute the loss, i.e., negative log likelihood (normalize by number of time steps)
+           likelihood = 1/Z * exp(-E) ->  neg_log_like = - log(1/Z * exp(-E)) = logZ + E
+        """
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
-        self.format_print("input_energy", input_energy)
         if self.use_boundary:
             input_energy = self.add_boundary_energy(input_energy, mask,
                                                     self.left_boundary,
                                                     self.right_boundary)
-            self.format_print("input_energy with boundary", input_energy)
-        energy = self.get_energy(y_true_1, input_energy, mask)
-        self.format_print("energy", energy)
-        # input_length = max_seq_length = 5
-        logZ = self.get_log_normalization_constant(input_energy, mask, input_length=K.int_shape(X)[1])
+        energy = self.get_energy(y_true, input_energy, mask)
+        logZ = self.get_log_normalization_constant(input_energy, mask,
+                                                   input_length=K.int_shape(X)[1])
         nloglik = logZ + energy
-
         if mask is not None:
             nloglik = nloglik / K.sum(K.cast(mask, K.floatx()), 1)
         else:
             nloglik = nloglik / K.cast(K.shape(X)[1], K.floatx())
-
         return nloglik
+
+    def step(self, input_energy_t, states, return_logZ=True):
+        # not in the following  `prev_target_val` has shape = (B, F)
+        # where B = batch_size, F = output feature dim
+        # Note: `i` is of float32, due to the behavior of `K.rnn`
+        prev_target_val, i, chain_energy = states[:3]
+        t = K.cast(i[0, 0], dtype='int32')
+        if len(states) > 3:
+            if K.backend() == 'theano':
+                m = states[3][:, t:(t + 2)]
+            else:
+                m = K.slice(states[3], [0, t], [-1, 2])
+            input_energy_t = input_energy_t * K.expand_dims(m[:, 0])
+            # (1, F, F)*(B, 1, 1) -> (B, F, F)
+            chain_energy = chain_energy * K.expand_dims(
+                K.expand_dims(m[:, 0] * m[:, 1]))
+        if return_logZ:
+            # shapes: (1, B, F) + (B, F, 1) -> (B, F, F)
+            energy = chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2)
+            new_target_val = K.logsumexp(-energy, 1)  # shapes: (B, F)
+            return new_target_val, [new_target_val, i + 1]
+        else:
+            energy = chain_energy + K.expand_dims(input_energy_t + prev_target_val, 2)
+            min_energy = K.min(energy, 1)
+            # cast for tf-version `K.rnn
+            argmin_table = K.cast(K.argmin(energy, 1), K.floatx())
+            return argmin_table, [min_energy, i + 1]
 
     def recursion(self, input_energy, mask=None, go_backwards=False,
                   return_sequences=True, return_logZ=True, input_length=None):
+        """Forward (alpha) or backward (beta) recursion
+
+        If `return_logZ = True`, compute the logZ, the normalization constant:
+
+        \[ Z = \sum_{y1, y2, y3} exp(-E) # energy
+          = \sum_{y1, y2, y3} exp(-(u1' y1 + y1' W y2 + u2' y2 + y2' W y3 + u3' y3))
+          = sum_{y2, y3} (exp(-(u2' y2 + y2' W y3 + u3' y3))
+          sum_{y1} exp(-(u1' y1' + y1' W y2))) \]
+
+        Denote:
+            \[ S(y2) := sum_{y1} exp(-(u1' y1 + y1' W y2)), \]
+            \[ Z = sum_{y2, y3} exp(log S(y2) - (u2' y2 + y2' W y3 + u3' y3)) \]
+            \[ logS(y2) = log S(y2) = log_sum_exp(-(u1' y1' + y1' W y2)) \]
+        Note that:
+              yi's are one-hot vectors
+              u1, u3: boundary energies have been merged
+
+        If `return_logZ = False`, compute the Viterbi's best path lookup table.
         """
-        Forward (alpha) or backward(beta) recursion
-        If "return_logZ=True", compute the logZ, the normalization constant
-        If "return_logZ=False", compute the Viterbi best path lookup table
-        """
-        # add all energies
-        # all shapes is (4, 4), where n_otr_tags = n_emb_tags
-        chain_energy_otr = self.chain_kernel_otr
-        chain_energy_emb = self.chain_kernel_emb
-        chain_energy_otr_emb = self.chain_kernel_otr_emb
-        # shape=(1, F, F): F=num of tags. 1st F is for t-1, 2nd F for t
-        chain_energy_otr = K.expand_dims(chain_energy_otr, 0)
-        chain_energy_emb = K.expand_dims(chain_energy_emb, 0)
-        chain_energy_otr_emb = K.expand_dims(chain_energy_otr_emb, 0)
-        print("chain_energy_otr", chain_energy_otr)
-        print("chain_energy_emb", chain_energy_emb)
-        print("chain_energy_otr_emb", chain_energy_otr_emb)
-        # initialize with zeros first row (transitions first tag to another)
+        chain_energy = self.chain_kernel
+        # shape=(1, F, F): F=num of output features. 1st F is for t-1, 2nd F for t
+        chain_energy = K.expand_dims(chain_energy, 0)
+        # shape=(B, F), dtype=float32
         prev_target_val = K.zeros_like(input_energy[:, 0, :])
-        # self.format_print("prev_target_val", prev_target_val)
-        # go_backward = False
+
         if go_backwards:
-            # [ [[1,2,3],[3,4,5]],[ [5,6,7],[7,8,9]] ] -> k.reverse, axis=1 -> [ [[3,4,5],[1,2,3]],[ [7,8,9],[5,6,7]] ]
-            # reverse order in axis=1
             input_energy = K.reverse(input_energy, 1)
             if mask is not None:
                 mask = K.reverse(mask, 1)
-        # second parameter is "i" in loop
+
         initial_states = [prev_target_val, K.zeros_like(prev_target_val[:, :1])]
-        constants = [chain_energy_otr, chain_energy_emb, chain_energy_otr_emb]
+        constants = [chain_energy]
+
         if mask is not None:
-            # self.format_print("mask", mask)
-            # self.format_print("K.zeros_like(mask[:, :1])", K.zeros_like(mask[:, :1]))
-            # self.format_print("K.concatenate(...)", K.concatenate([mask, K.zeros_like(mask[:, :1])], axis=1))
             mask2 = K.cast(K.concatenate([mask, K.zeros_like(mask[:, :1])], axis=1),
                            K.floatx())
-            # self.format_print("mask2", mask2)
             constants.append(mask2)
-            # self.format_print("constants", constants)
 
         def _step(input_energy_i, states):
             return self.step(input_energy_i, states, return_logZ)
 
-        # self.format_print("input_energy", input_energy)
         target_val_last, target_val_seq, _ = K.rnn(_step, input_energy,
                                                    initial_states,
                                                    constants=constants,
                                                    input_length=input_length,
                                                    unroll=self.unroll)
-        print("target_val_last", target_val_last)
-        self.format_print("target_val_seq", target_val_seq)
 
-        # return_sequence = True (by default)
-        print("return_sequences in recursion() = ", return_sequences)
         if return_sequences:
-            print("go_backwards in recursion() = ", go_backwards)
-            # go_backwards = False -> Forward(alpha) recursion
             if go_backwards:
                 target_val_seq = K.reverse(target_val_seq, 1)
-            self.format_print("go_backwards = false, target_val_seq", target_val_seq)
             return target_val_seq
         else:
             return target_val_last
 
-    def step(self, input_energy_t, states, return_logZ=True):
-        prev_target_val, i, chain_energy_otr, chain_energy_emb, chain_energy_otr_emb = states[:5]
-        self.format_print("prev_target_val",  prev_target_val)
-        self.format_print("i", i)
-        # t is used for mask computation
-        t = K.cast(i[0, 0], dtype="int32")
-        '''
-        # If mask is used
-        if len(states) > 3:
-            if K.backend() == "theano":
-                m = states[3][:, t:(t + 2)]
+    def forward_recursion(self, input_energy, **kwargs):
+        return self.recursion(input_energy, **kwargs)
+
+    def backward_recursion(self, input_energy, **kwargs):
+        return self.recursion(input_energy, go_backwards=True, **kwargs)
+
+    def get_marginal_prob(self, X, mask=None):
+        input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
+        if self.use_boundary:
+            input_energy = self.add_boundary_energy(input_energy, mask,
+                                                    self.left_boundary,
+                                                    self.right_boundary)
+        input_length = K.int_shape(X)[1]
+        alpha = self.forward_recursion(input_energy, mask=mask,
+                                       input_length=input_length)
+        beta = self.backward_recursion(input_energy, mask=mask,
+                                       input_length=input_length)
+        if mask is not None:
+            input_energy = input_energy * K.expand_dims(K.cast(mask, K.floatx()))
+        margin = -(self.shift_right(alpha) + input_energy + self.shift_left(beta))
+        return self.softmaxNd(margin)
+
+    def viterbi_decoding(self, X, mask=None):
+        input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
+        if self.use_boundary:
+            input_energy = self.add_boundary_energy(
+                input_energy, mask, self.left_boundary, self.right_boundary)
+
+        argmin_tables = self.recursion(input_energy, mask, return_logZ=False)
+        argmin_tables = K.cast(argmin_tables, 'int32')
+
+        # backward to find best path, `initial_best_idx` can be any,
+        # as all elements in the last argmin_table are the same
+        argmin_tables = K.reverse(argmin_tables, 1)
+        # matrix instead of vector is required by tf `K.rnn`
+        initial_best_idx = [K.expand_dims(argmin_tables[:, 0, 0])]
+        if K.backend() == 'theano':
+            from theano import tensor as T
+            initial_best_idx = [T.unbroadcast(initial_best_idx[0], 1)]
+
+        def gather_each_row(params, indices):
+            n = K.shape(indices)[0]
+            if K.backend() == 'theano':
+                from theano import tensor as T
+                return params[T.arange(n), indices]
+            elif K.backend() == 'tensorflow':
+                import tensorflow as tf
+                indices = K.transpose(K.stack([tf.range(n), indices]))
+                return tf.gather_nd(params, indices)
             else:
-                m = K.slice(states[3], [0, t], [-1, 2])
-            input_energy_t = input_energy_t * K.expand_dims(m[:, 0])
-            chain_energy = chain_energy * K.expand_dims(K.expand_dims(m[:, 0] * m[:, 1]))
-            print("chain_energy", chain_energy)
-        '''
-        # If normalization Z is computed
-        if return_logZ:
-            '''
-            # shapes: (1, B, F) + (B, F, 1) -> (B, F, F)
-            energy = chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2)
-            self.format_print("energy", energy)
-            # shape: (B, F)
-            # Computes partition_function log(sum(exp(elements across dimensions of a tensor)))
-            self.format_print("-energy", -energy)
-            new_target_val = K.logsumexp(-energy, 1)
-            self.format_print(" [new_target_val, i + 1]", new_target_val)
-            return new_target_val, [new_target_val, i + 1]
-            '''
-        else:
-            # chain_energy is the same in all iterations
-            # input_energy_t takes next row from input_energy
-            # prev_target_val is min_energy from previous iteration
-            self.format_print("chain_energy_otr", chain_energy_otr)
-            self.format_print("chain_energy_emb", chain_energy_emb)
-            self.format_print("chain_energy_otr_emb", chain_energy_otr_emb)
-            self.format_print("prev_target_val", prev_target_val)
-            self.format_print("input_energy_t", input_energy_t)
-            self.format_print("K.expand_dims", K.expand_dims(input_energy_t + prev_target_val, 2))
-            energy = chain_energy_otr + chain_energy_emb + chain_energy_otr_emb + K.expand_dims(input_energy_t + prev_target_val, 2)
-            min_energy = K.min(energy, 1)
-            self.format_print("min_energy", min_energy)
-            argmin_table = K.cast(K.argmin(energy, 1), K.floatx())
-            print("argmin_table", argmin_table)
-            return argmin_table, [min_energy, i + 1]
+                raise NotImplementedError
 
-    @staticmethod
-    def shift_left(x, offset=1):
-        # x = mask
-        assert offset > 0
-        # Concatenates tensors along one dimension
-        # [ [[1],[2],[3]], [[4],[5],[6]] ] -> K.concatenate -> [ [[2],[3],[0]], [[5],[6],[0]] ]
-        # (after shifting still the same shape)
-        shift_left_t = K.concatenate([x[:, offset:], K.zeros_like(x[:, :offset])], axis=1)
-        print("shift_left.shape", shift_left_t.shape, "shift_left = ", shift_left_t.numpy())
-        return shift_left_t
+        def find_path(argmin_table, best_idx):
+            next_best_idx = gather_each_row(argmin_table, best_idx[0][:, 0])
+            next_best_idx = K.expand_dims(next_best_idx)
+            if K.backend() == 'theano':
+                from theano import tensor as T
+                next_best_idx = T.unbroadcast(next_best_idx, 1)
+            return next_best_idx, [next_best_idx]
 
-    @staticmethod
-    def shift_right(x, offset=1):
-        # x = mask = (?,80,1) = dtype = float32
-        assert offset > 0
-        # --------x[:, :1]------------
-        # offset=1, take in each string all elements until [1] -> element[0] in each string
-        # [ [[0][1][2]] [[3][4][5]] ] -> offset = 1 -> [ [[0]] [[3]] ]
-        # -----------------------------------
-        # -----------K.zeros_like(x[:, :offset])- initialize this tensor with zeros
-        # [ [[0]] [[3]] ] -> [ [[0]] [[0]] ] - now shape is (2,2,1)
-        # -----------------------------------
-        # -------------x[:, :-1]----------
-        # negative index -> [ [[0][1][2]] [[3][4][5]] ] ->  x[1,-1] = [5] - last element from the end[-1] in string[1]
-        # x[:, :-1] = [ [[2]] [[5]] ]
-        # ----------------- K.concatenate------------------
-        # shape(2, 1, 4) + shape(2, 2, 4) -> exis = 1 sum over second dimension -> (2, 1+2, 4)
-        # [ [[1],[2],[3]], [[4],[5],[6]] ] -> K.concatenate -> [ [[0],[1],[2]], [[0],[4],[5]] ]
-        # (after shifting still the same shape)
-        shift_right_t = K.concatenate([K.zeros_like(x[:, :offset]), x[:, :-offset]], axis=1)
-        print("shift_right.shape", shift_right_t.shape, "shift_right = ", shift_right_t.numpy())
-        return shift_right_t
+        _, best_paths, _ = K.rnn(find_path, argmin_tables, initial_best_idx,
+                                 input_length=K.int_shape(X)[1], unroll=self.unroll)
+        best_paths = K.reverse(best_paths, 1)
+        best_paths = K.squeeze(best_paths, 2)
 
-    def format_print(self, variable_name, input_data):
-
-        if hasattr(input_data, "shape"):
-            return print("-" * 75, "\n" + variable_name + ".shape = ", input_data.shape, "\n" + variable_name +
-                         " = " + "\n", input_data.numpy(), "\n", "-" * 75)
-        elif type(input_data) is list or tuple:
-            return print("-" * 75, "\n" + variable_name + ".length = ", len(input_data), "\n" + variable_name + " = " +
-                         "\n", input_data, "\n", "-" * 75)
-        else:
-            print("Type of the printed data = ", type(input_data))
-            print(input_data.numpy())
+        return K.one_hot(best_paths, self.units)

@@ -62,7 +62,7 @@ right_boundary = tf.constant(np.arange(4, 8, dtype=np.float32), shape=[4, ])
 
 # data for crf_loss
 # shape of y_true_1 = (batch_size, max_seq_len, n_tags)=(2, 5, 4)
-y_true_1 = tf.constant(
+y_true = tf.constant(
     [
         [
             [1, 0, 0, 0],
@@ -194,7 +194,7 @@ left_boundary = K.cast(tf.constant(np.random.randint(10, 300, size=(4,))), K.flo
 
 # shape = (n_tags,) -> (4,)
 right_boundary = K.cast(tf.constant(np.random.randint(10, 300, size=(4,))), K.floatx())
-
+'''
 # argmin_table shape = (2, 5, 4)
 
 
@@ -218,4 +218,4 @@ argmin_table = tf.constant(
     ]
     , dtype="float32"
 )
-'''
+
