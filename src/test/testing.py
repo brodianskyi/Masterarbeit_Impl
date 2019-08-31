@@ -3,7 +3,7 @@ from __future__ import print_function
 import tensorflow as tf
 from keras import backend as K
 
-tf.enable_eager_execution()
+# tf.enable_eager_execution()
 X = tf.constant(
     [
         [
@@ -25,7 +25,14 @@ X = tf.constant(
     , dtype="float32"
 )
 
-print(K.one_hot(X, 4))
 
+t = tf.constant([[[1, 1, 1], [2, 2, 2]],
+                 [[3, 3, 3], [4, 4, 4]],
+                 [[5, 5, 5], [6, 6, 6]]])
+# print(tf.slice(t, [1, 0, 0], [1, 1, 3]))
 
+from keras import backend as b
+
+x = tf.constant([[0., 1., 2.], [3., 4., 5.]])
+print(tf.reduce_logsumexp(x))
 

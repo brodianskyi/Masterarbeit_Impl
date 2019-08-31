@@ -1,6 +1,6 @@
-from keras import backend as K
-from keras.losses import categorical_crossentropy
-from keras.losses import sparse_categorical_crossentropy
+from tensorflow.keras import backend as K
+from tensorflow.keras.losses import categorical_crossentropy
+from tensorflow.keras.losses import sparse_categorical_crossentropy
 
 
 def crf_nll(y_true, y_pred):

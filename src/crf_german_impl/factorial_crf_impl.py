@@ -3,13 +3,13 @@ from __future__ import division
 
 import warnings
 
-from keras import activations
-from keras import backend as K
-from keras import constraints
-from keras import initializers
-from keras import regularizers
-from keras.layers import InputSpec
-from keras.layers import Layer
+from tensorflow.keras import activations
+from tensorflow.keras import backend as K
+from tensorflow.keras import constraints
+from tensorflow.keras import initializers
+from tensorflow.keras import regularizers
+from tensorflow.keras.layers import InputSpec
+from tensorflow.keras.layers import Layer
 from keras_contrib.utils.test_utils import to_tuple
 
 from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy

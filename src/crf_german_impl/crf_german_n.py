@@ -1,11 +1,10 @@
 import csv
 import numpy as np
 import pandas as pd
-from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional, Add
-from keras.models import Model, Input
-from keras.preprocessing.sequence import pad_sequences
-from keras.utils import to_categorical
-from keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional, Input
+from tensorflow.keras.models import Model
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+import tensorflow.keras.utils as utils
 # from src.crf_german_impl.crf_n import CRF
 import src.crf_german_impl.crf_n as crf_otr
 import src.crf_german_impl.factorial_crf_impl as crf_emb
@@ -15,9 +14,10 @@ from seqeval.metrics import f1_score, classification_report
 from src.crf_german_impl.crf_loss_n import crf_loss
 from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
 from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy
+# from tensorflow.keras.optimizers import Adam
 
 # number of examples used in each iteration
-BATCH_SIZE = 250
+BATCH_SIZE = 300
 # number of passes through entire dataset
 EPOCHS = 4
 # length of the subsequence
@@ -123,8 +123,8 @@ y_emb = pad_sequences(maxlen=MAX_LEN, sequences=y_emb, padding="post", value=tag
 
 # one-hot encode
 # in both cases num_classes need to be equal to n_otr_tags+1
-y_otr = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y_otr]
-y_emb = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y_emb]
+y_otr = [utils.to_categorical(i, num_classes=n_otr_tags + 1) for i in y_otr]
+y_emb = [utils.to_categorical(i, num_classes=n_otr_tags + 1) for i in y_emb]
 
 # y = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y]
 
@@ -151,6 +151,7 @@ for word, i in word2idx.items():
         if embedding_vector is not None:
             embedding_matrix[i] = embedding_vector
 '''
+
 # Model definition
 # input is a "tensor", that will be passed when calling other layers to produce an output
 input = Input(shape=(MAX_LEN,))
@@ -165,21 +166,21 @@ model = TimeDistributed(Dense(50, activation="relu"))(model)
 # crf_otr and crf_emb are called with the same input x, creating a fork
 crf_otr = crf_otr.CRF(n_otr_tags + 1)
 out_otr = crf_otr(model)
-crf_emb = crf_emb.CRF(n_otr_tags + 1)
-out_emb = crf_emb([model, out_otr])
-# model = Model(input, out_otr)
-model = Model(input, [out_otr, out_emb])
+# crf_emb = crf_emb.CRF(n_otr_tags + 1)
+# out_emb = crf_emb([model, out_otr])
+model = Model(input, out_otr)
+# model = Model(input, [out_otr, out_emb])
 # model.summary()
 # set pre trained weight into embedding layer
 # model.layers[1].set_weights([embedding_matrix])
 # model.layers[1].trainable = False
-# model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
+model.compile(optimizer="adam", loss=crf_loss, metrics=[crf_viterbi_accuracy])
 # loss can be one for both otr and emb or a list with different loss functions for otr and emb
-model.compile("rmsprop", loss=crf_loss, metrics={'out_otr': 'crf_marginal_accuracy', 'out_emb': 'crf_viterbi_accuracy'})
+# model.compile("rmsprop", loss=crf_loss, metrics={'out_otr': 'crf_marginal_accuracy', 'out_emb': 'crf_viterbi_accuracy'})
 # model.compile("adam", loss=crf_loss, metrics=[crf_viterbi_accuracy])
 model.summary()
-history = model.fit(X_tr, [np.array(y_tr_otr), np.array(y_tr_emb)], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
 # history = model.fit(X_tr, [np.array(y_tr_otr), np.array(y_tr_emb)], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
+history = model.fit(X_tr, np.array(y_tr_otr), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
 # new version
 test_pred = model.predict(X_te, verbose=1)
 
@@ -210,10 +211,10 @@ def pred2label(pred):
     return out
 
 
-# pred_labels = pred2label(test_pred)
-# test_labels_otr = pred2label(y_tr_otr)
-# print("F1-score: {:.1%}".format(f1_score(test_labels_otr, pred_labels)))
-# print(classification_report(test_labels_otr, pred_labels))
+pred_labels = pred2label(test_pred)
+test_labels_otr = pred2label(y_tr_otr)
+print("F1-score: {:.1%}".format(f1_score(test_labels_otr, pred_labels)))
+print(classification_report(test_labels_otr, pred_labels))
 
 
 

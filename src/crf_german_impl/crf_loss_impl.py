@@ -1,8 +1,4 @@
 import src.crf_german_impl.data_source as d_src
-import tensorflow as tf
-
-
-tf.enable_eager_execution()
 
 
 def crf_nll(y_true, y_pred, crf):
