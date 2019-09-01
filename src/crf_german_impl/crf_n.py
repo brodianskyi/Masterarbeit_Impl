@@ -3,19 +3,19 @@ from __future__ import division
 
 import warnings
 
-from keras import activations
-from keras import backend as K
-from keras import constraints
-from keras import initializers
-from keras import regularizers
-from keras.layers import InputSpec
-from keras.layers import Layer
+import tensorflow as tf
 from keras_contrib.utils.test_utils import to_tuple
+from tensorflow.keras import activations
+from tensorflow.keras import backend as K
+from tensorflow.keras import constraints
+from tensorflow.keras import initializers
+from tensorflow.keras import regularizers
+from tensorflow.keras.layers import InputSpec
+from tensorflow.keras.layers import Layer
 
 from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy
 from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
 from src.crf_german_impl.crf_loss_n import crf_loss
-import tensorflow as tf
 
 
 class CRF(Layer):
@@ -194,7 +194,7 @@ class CRF(Layer):
     """
 
     def __init__(self, units,
-                 learn_mode='marginal',
+                 learn_mode='join',
                  test_mode=None,
                  sparse_target=False,
                  use_boundary=True,
@@ -462,7 +462,8 @@ class CRF(Layer):
             if K.backend() == 'theano':
                 m = states[3][:, t:(t + 2)]
             else:
-                m = K.slice(states[3], [0, t], [-1, 2])
+                # m = K.slice(states[3], [0, t], [-1, 2])
+                m = tf.slice(states[3], [0, t], [-1, 2])
             input_energy_t = input_energy_t * K.expand_dims(m[:, 0])
             # (1, F, F)*(B, 1, 1) -> (B, F, F)
             chain_energy = chain_energy * K.expand_dims(
@@ -470,7 +471,8 @@ class CRF(Layer):
         if return_logZ:
             # shapes: (1, B, F) + (B, F, 1) -> (B, F, F)
             energy = chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2)
-            new_target_val = K.logsumexp(-energy, 1)  # shapes: (B, F)
+            # new_target_val = K.logsumexp(-energy, 1)  # shapes: (B, F)
+            new_target_val = tf.compat.v2.reduce_logsumexp(-energy, 1)
             return new_target_val, [new_target_val, i + 1]
         else:
             energy = chain_energy + K.expand_dims(input_energy_t + prev_target_val, 2)
