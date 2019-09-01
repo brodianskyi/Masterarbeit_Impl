@@ -25,7 +25,9 @@ X = tf.constant(
     , dtype="float32"
 )
 
-print(K.one_hot(X, 4))
+input_shape = (2, 80, 50)
+print(input_shape[:2])
+print(input_shape[:2]+(5,))
 
 
 

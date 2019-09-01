@@ -426,10 +426,12 @@ class CRF(Layer):
         logZ = self.recursion(input_energy, mask, return_sequences=False, **kwargs)
         return logZ[:, 0]
 
-    def get_negative_log_likelihood(self, y_true_1, X, mask):
+    def get_negative_log_likelihood(self, y_true, X, mask):
         # Computation of the negative log likelihood
         # negative_log_like = -log(1/Z * exp(-E)) = logZ + E
         # shape_of_kernel=(input_dim, units)
+        # X = [tensor_from_emb(None, max_seq_length, emb_dim), tensor_from_pre_crf(None, max_seq_length, n_tags)]
+        # kernel = (input_dim=emb_dim, units = n_tags)
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
         self.format_print("input_energy", input_energy)
         if self.use_boundary:
@@ -437,7 +439,7 @@ class CRF(Layer):
                                                     self.left_boundary,
                                                     self.right_boundary)
             self.format_print("input_energy with boundary", input_energy)
-        energy = self.get_energy(y_true_1, input_energy, mask)
+        energy = self.get_energy(y_true, input_energy, mask)
         self.format_print("energy", energy)
         # input_length = max_seq_length = 5
         logZ = self.get_log_normalization_constant(input_energy, mask, input_length=K.int_shape(X)[1])

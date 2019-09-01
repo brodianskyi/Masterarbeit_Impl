@@ -436,6 +436,7 @@ class CRF(Layer):
         """Compute the loss, i.e., negative log likelihood (normalize by number of time steps)
            likelihood = 1/Z * exp(-E) ->  neg_log_like = - log(1/Z * exp(-E)) = logZ + E
         """
+        print("----------------------------------dasdasdasdas------------------------------")
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
         if self.use_boundary:
             input_energy = self.add_boundary_energy(input_energy, mask,

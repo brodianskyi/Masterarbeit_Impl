@@ -10,12 +10,10 @@ from keras import initializers
 from keras import regularizers
 from keras.layers import InputSpec
 from keras.layers import Layer
-from keras_contrib.utils.test_utils import to_tuple
 
 from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy
 from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
 from src.crf_german_impl.crf_loss_n import crf_loss
-import tensorflow as tf
 
 
 class CRF(Layer):
@@ -297,28 +295,38 @@ class CRF(Layer):
         #    assert K.ndim(mask) == 2, 'Input mask to CRF must have dim 2 if not None'
 
         if self.test_mode == 'viterbi':
-            test_output = self.viterbi_decoding(X[0], mask)
+            test_output = self.viterbi_decoding(X[0], mask[0])
         else:
-            test_output = self.get_marginal_prob(X[0], mask)
+            test_output = self.get_marginal_prob(X[0], mask[0])
 
         self.uses_learning_phase = True
         if self.learn_mode == 'join':
-            train_output = K.zeros_like(K.dot(X, self.kernel))
+            train_output = K.zeros_like(K.dot(X[0], self.kernel))
+            # out = test_output
             out = K.in_train_phase(train_output, test_output)
         else:
             if self.test_mode == 'viterbi':
-                train_output = self.get_marginal_prob(X, mask)
+                train_output = self.get_marginal_prob(X[0], mask[0])
                 out = K.in_train_phase(train_output, test_output)
             else:
                 out = test_output
         return out
 
     def compute_output_shape(self, input_shape):
-        return input_shape[:2] + (self.units,)
+        assert isinstance(input_shape, list)
+        # return result from last label sequence
+        out_from_distr, out_from_1crf = input_shape
+        # (None, max_seq_length, n_tags)
+        print(out_from_distr[:2] + (self.units,))
+        return out_from_distr[:2] + (self.units,)
 
     def compute_mask(self, input, mask=None):
         if mask is not None and self.learn_mode == 'join':
-            return K.any(mask, axis=1)
+            # return K.any(mask, axis=1)
+            # mask = <list> = [(None, 80), (None, 80)]
+            assert isinstance(mask, list)
+            print([K.any(mask[0], axis=1), K.any(mask[1], axis=1)])
+            return [K.any(mask[0], axis=1), K.any(mask[1], axis=1)]
         return mask
 
     def get_config(self):
@@ -443,7 +451,12 @@ class CRF(Layer):
         """Compute the loss, i.e., negative log likelihood (normalize by number of time steps)
            likelihood = 1/Z * exp(-E) ->  neg_log_like = - log(1/Z * exp(-E)) = logZ + E
         """
-        input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
+        # X = [tensor_from_emb(None, max_seq_length, emb_dim), tensor_from_pre_crf(None, max_seq_length, n_tags)]
+        # kernel = (input_dim=emb_dim, units = n_tags)
+        # input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
+        add_prev_weights = K.dot(X[1], K.dot(X[0], self.kernel))
+        # input_energy = self.activation(K.dot(X[0], self.kernel) + self.bias)
+        input_energy = self.activation(add_prev_weights + self.bias)
         if self.use_boundary:
             input_energy = self.add_boundary_energy(input_energy, mask,
                                                     self.left_boundary,
