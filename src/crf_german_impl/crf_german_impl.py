@@ -1,4 +1,6 @@
 import csv
+import sys
+
 import numpy as np
 import pandas as pd
 from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional
@@ -14,13 +16,13 @@ from src.crf_german_impl.crf_loss_n import crf_loss
 BATCH_SIZE = 250
 EPOCHS = 4
 MAX_LEN = 80
-EMBEDDING = 250
+EMBEDDING = 300
 
 data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span", "EMB_Span", "Sentence_number"],
                    delimiter="\t",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
 
-data = data.head(300)
+# data = data.head(300)
 
 
 class SentenceGetter(object):
@@ -109,7 +111,7 @@ y_emb = pad_sequences(maxlen=MAX_LEN, sequences=y_emb, padding="post", value=tag
 y_otr = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y_otr]
 y_emb = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y_emb]
 
-X_tr, X_te, y_tr_otr, y_te_otr, y_tr_emb, y_te_emb = train_test_split(X, y_otr, y_emb)
+X_tr, X_te, y_tr_otr, y_te_otr, y_tr_emb, y_te_emb = train_test_split(X, y_otr, y_otr)
 
 '''
 # parse embeddings to build word as string to their vector representation
@@ -166,10 +168,24 @@ def pred2label(pred):
     return out
 
 
+oldStdout = sys.stdout
+file_out = open("output.txt", "w")
+sys.stdout = file_out
 pred_1_label_seq = pred2label(test_pred[0])
 pred_2_label_seq = pred2label(test_pred[1])
 test_1_labels_seq = pred2label(y_tr_otr)
 test_2_labels_seq = pred2label(y_tr_emb)
+for i in range(350):
+    print(pred_1_label_seq[i])
+    print(pred_2_label_seq[i])
+    print("-"*20)
+    print(test_1_labels_seq[i])
+    print(test_2_labels_seq[i])
+    print("=" * 20)
+
+
+sys.stdout = oldStdout
+file_out.close()
 
 # print("F1-score: {:.1%}".format(f1_score(test_labels_emb, pred_labels)))
 # print(classification_report(test_labels_emb, pred_labels))
