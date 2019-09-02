@@ -25,3 +25,9 @@ def crf_viterbi_accuracy(y_true, y_pred, crf):
     y_pred = crf.viterbi_decoding(X, mask)
     print("----------_get_accuracy", _get_accuracy(y_true, y_pred, mask, crf.sparse_target))
     return _get_accuracy(y_true, y_pred, mask, crf.sparse_target)
+
+def crf_marginal_accuracy(y_true, y_pred, crf):
+    X = d_src.X
+    mask = d_src.mask
+    y_pred = crf.get_marginal_prob(X, mask)
+    return y_pred

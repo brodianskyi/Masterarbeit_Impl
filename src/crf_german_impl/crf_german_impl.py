@@ -1,47 +1,26 @@
 import csv
 import numpy as np
 import pandas as pd
-from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional, Add
+from keras.layers import LSTM, Embedding, Dense, TimeDistributed, Bidirectional
 from keras.models import Model, Input
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils import to_categorical
-from keras.models import Sequential
-# from src.crf_german_impl.crf_n import CRF
-import src.crf_german_impl.crf_n as crf_otr
-import src.crf_german_impl.crf_n_222 as emb_crf
-import src.crf_german_impl.factorial_crf_impl as crf_emb
-# from src.crf_german_impl.crf_impl import CRF
+from src.crf_german_impl.crf_n import CRF
+from src.crf_german_impl.factorial_crf_impl import FCRF
 from sklearn.model_selection import train_test_split
 from seqeval.metrics import f1_score, classification_report
 from src.crf_german_impl.crf_loss_n import crf_loss
-from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
-from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy
-import tensorflow as tf
-from keras import backend as K
 
-# number of examples used in each iteration
 BATCH_SIZE = 250
-# number of passes through entire dataset
 EPOCHS = 4
-# length of the subsequence
 MAX_LEN = 80
-# dimension of word embedding vector
 EMBEDDING = 250
 
 data = pd.read_csv("NER-de-train.tsv", names=["Word_number", "Word", "OTR_Span", "EMB_Span", "Sentence_number"],
                    delimiter="\t",
                    quoting=csv.QUOTE_NONE, encoding='utf-8')
 
-# data = data.head(300)
-# print("-------data", data)
-emb_tags = list(set(data["EMB_Span"]))
-# print("-----emb_tags", emb_tags)
-otr_tags = list(set(data["OTR_Span"]))
-# print("-----otr_tags", otr_tags)
-n_emb_tags = len(emb_tags)
-# print("----n_emb_tags", n_emb_tags)
-n_otr_tags = len(otr_tags)
-# print("----n_otr_tags", n_otr_tags)
+data = data.head(300)
 
 
 class SentenceGetter(object):
@@ -93,10 +72,11 @@ sent = getter.get_first_sent()
 sentences = getter.sentences
 words = getter.get_column(0)
 n_words = len(words)
+# first sequence of labels
 otr_tags = getter.get_column(1)
-# print("otr_tags", otr_tags)
 n_otr_tags = len(otr_tags)
 print("n_otr_tags", n_otr_tags)
+# second sequence of labels
 emb_tags = getter.get_column(2)
 n_emb_tags = len(emb_tags)
 print("n_emb_tags", n_emb_tags)
@@ -124,17 +104,13 @@ y_otr = pad_sequences(maxlen=MAX_LEN, sequences=y_otr, padding="post", value=tag
 y_emb = [[tag2idx[w[2]] for w in s] for s in sentences]
 y_emb = pad_sequences(maxlen=MAX_LEN, sequences=y_emb, padding="post", value=tag2idx["PAD"])
 
-# one-hot encode
 # in both cases num_classes need to be equal to n_otr_tags+1
+# only if entities in sequences are from the same set
 y_otr = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y_otr]
 y_emb = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y_emb]
 
-# y = [to_categorical(i, num_classes=n_otr_tags + 1) for i in y]
-
 X_tr, X_te, y_tr_otr, y_te_otr, y_tr_emb, y_te_emb = train_test_split(X, y_otr, y_emb)
 
-# X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.1)
-# X_tr.shape, X_te.shape, np.array(y_tr_otr).shape, np.array(y_te_otr).shape,
 '''
 # parse embeddings to build word as string to their vector representation
 word_vector_model = gensim.models.KeyedVectors.load_word2vec_format("german.model", binary=True)
@@ -154,56 +130,32 @@ for word, i in word2idx.items():
         if embedding_vector is not None:
             embedding_matrix[i] = embedding_vector
 '''
-# Model definition
-# input is a "tensor", that will be passed when calling other layers to produce an output
+
 input = Input(shape=(MAX_LEN,))
-# input_dim = n_word + PAD + UNK - size of the vocabulary
-# and calling embedding layer with (input) produces the output tensor model
+# input_dim = n_word + PAD + UNK
 model = Embedding(input_dim=n_words + 2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)(input)
-# replace value of model, because this intermediate output is not interesting to keep
 model = Bidirectional(LSTM(units=50, return_sequences=True, recurrent_dropout=0.5))(model)
 model = TimeDistributed(Dense(50, activation="relu"))(model)
-# CRF Layer = n_otr_tags + PAD
-# keep the two different outputs for defining the model
-# crf_otr and crf_emb are called with the same input x, creating a fork
-crf_otr_1 = crf_otr.CRF(n_otr_tags + 1)
-out_otr = crf_otr_1(model)
-crf_emb = emb_crf.CRF(n_otr_tags + 1)
-# out_emb = crf_emb([model, out_otr])
-out_emb = crf_emb(out_otr)
-# model = Model(input, out_emb)
-model = Model(input, [out_otr, out_emb])
-# model.summary()
+# train CRF in the marginal-mode
+crf = CRF(n_otr_tags + 1)
+crf = crf(model)
+# train FCRF in the join-mode
+fcrf = FCRF(n_otr_tags + 1)
+# use output from the CRF-layer(first sequence of labels) to predict the second sequence of labels in the FCRF
+fcrf = fcrf([model, crf])
+model = Model(input, [crf, fcrf])
 # set pre trained weight into embedding layer
 # model.layers[1].set_weights([embedding_matrix])
 # model.layers[1].trainable = False
-# model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
-# loss can be one for both otr and emb or a list with different loss functions for otr and emb
 model.compile("adam", loss=crf_loss, metrics={'out_otr': 'crf_marginal_accuracy', 'out_emb': 'crf_viterbi_accuracy'})
-# model.compile("adam", loss=crf_loss, metrics=[crf_marginal_accuracy])
 model.summary()
-history = model.fit(X_tr, [np.array(y_tr_otr), np.array(y_tr_emb)], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
-# history = model.fit(X_tr, np.array(y_tr_otr), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
-# new version
+history = model.fit(X_tr, [np.array(y_tr_otr), np.array(y_tr_emb)], batch_size=BATCH_SIZE, epochs=EPOCHS,
+                    validation_split=0.1, verbose=2)
+
 test_pred = model.predict(X_tr, verbose=1)
 
-"""
-model = Sequential()
-embeddings = Embedding(input_dim=n_words+2, output_dim=EMBEDDING, input_length=MAX_LEN, mask_zero=True)
-model.add(embeddings)
-crf = CRF(n_otr_tags + 1)
-model.add(crf)
-"""
 
 def pred2label(pred):
-    # [[[0001][0010]]]
-    '''
-    for i in range(len(pred)):
-        p = np.argmax(pred[i], axis=-1)
-        for t, pr in zip(y_te[i], p):
-            t_out.append(idx2tag[t].replace("0", "O").replace("PAD", "O"))
-            pre_out.append(idx2tag[pr].replace("0", "O").replace("PAD", "O"))
-    '''
     out = []
     for pred_i in pred:
         out_i = []
@@ -214,16 +166,13 @@ def pred2label(pred):
     return out
 
 
-pred_labels = pred2label(test_pred[1])
-# test_labels_otr = pred2label(y_tr_otr)
-# pred_labels_2 = pred2label(test_pred[1])
-test_labels_emb = pred2label(y_tr_emb)
+pred_1_label_seq = pred2label(test_pred[0])
+pred_2_label_seq = pred2label(test_pred[1])
+test_1_labels_seq = pred2label(y_tr_otr)
+test_2_labels_seq = pred2label(y_tr_emb)
 
-print("F1-score: {:.1%}".format(f1_score(test_labels_emb, pred_labels)))
-print(classification_report(test_labels_emb, pred_labels))
-
-
-
+# print("F1-score: {:.1%}".format(f1_score(test_labels_emb, pred_labels)))
+# print(classification_report(test_labels_emb, pred_labels))
 
 '''
 # old version

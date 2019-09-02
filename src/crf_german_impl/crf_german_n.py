@@ -178,7 +178,7 @@ model = Model(input, out_otr)
 # model.compile(optimizer="rmsprop", loss=crf.loss_function, metrics=[crf.accuracy])
 # loss can be one for both otr and emb or a list with different loss functions for otr and emb
 # model.compile("adam", loss=crf_loss, metrics={'out_otr': 'crf_marginal_accuracy', 'out_emb': 'crf_viterbi_accuracy'})
-model.compile("adam", loss=crf_loss, metrics=[crf_viterbi_accuracy])
+# model.compile("adam", loss=crf_loss, metrics=[crf_viterbi_accuracy])
 model.summary()
 # history = model.fit(X_tr, [np.array(y_tr_otr), np.array(y_tr_emb)], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)
 history = model.fit(X_tr, np.array(y_tr_otr), batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.1, verbose=2)

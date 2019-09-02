@@ -5,13 +5,13 @@ import warnings
 
 import tensorflow as tf
 from keras_contrib.utils.test_utils import to_tuple
-from tensorflow.keras import activations
-from tensorflow.keras import backend as K
-from tensorflow.keras import constraints
-from tensorflow.keras import initializers
-from tensorflow.keras import regularizers
-from tensorflow.keras.layers import InputSpec
-from tensorflow.keras.layers import Layer
+from keras import activations
+from keras import backend as K
+from keras import constraints
+from keras import initializers
+from keras import regularizers
+from keras.layers import InputSpec
+from keras.layers import Layer
 
 from src.crf_german_impl.crf_accuracies_n import crf_marginal_accuracy
 from src.crf_german_impl.crf_accuracies_n import crf_viterbi_accuracy
@@ -194,7 +194,7 @@ class CRF(Layer):
     """
 
     def __init__(self, units,
-                 learn_mode='join',
+                 learn_mode='marginal',
                  test_mode=None,
                  sparse_target=False,
                  use_boundary=True,
@@ -436,7 +436,6 @@ class CRF(Layer):
         """Compute the loss, i.e., negative log likelihood (normalize by number of time steps)
            likelihood = 1/Z * exp(-E) ->  neg_log_like = - log(1/Z * exp(-E)) = logZ + E
         """
-        print("----------------------------------dasdasdasdas------------------------------")
         input_energy = self.activation(K.dot(X, self.kernel) + self.bias)
         if self.use_boundary:
             input_energy = self.add_boundary_energy(input_energy, mask,
@@ -471,8 +470,7 @@ class CRF(Layer):
         if return_logZ:
             # shapes: (1, B, F) + (B, F, 1) -> (B, F, F)
             energy = chain_energy + K.expand_dims(input_energy_t - prev_target_val, 2)
-            # new_target_val = K.logsumexp(-energy, 1)  # shapes: (B, F)
-            new_target_val = tf.compat.v2.reduce_logsumexp(-energy, 1)
+            new_target_val = K.logsumexp(-energy, 1)  # shapes: (B, F)
             return new_target_val, [new_target_val, i + 1]
         else:
             energy = chain_energy + K.expand_dims(input_energy_t + prev_target_val, 2)
